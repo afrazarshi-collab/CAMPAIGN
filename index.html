@@ -474,6 +474,60 @@
     margin-top: 0.5rem;
   }
 
+
+  /* MISS YOU BUTTON */
+  .miss-you-btn {
+    background: var(--brown);
+    color: var(--cream);
+    border: none;
+    padding: 1.4rem 2.5rem;
+    font-family: 'Dancing Script', cursive;
+    font-size: clamp(1.4rem, 4vw, 2rem);
+    border-radius: 60px;
+    cursor: pointer;
+    box-shadow: 6px 6px 0 var(--caramel);
+    transition: transform 0.2s, box-shadow 0.2s, background 0.3s;
+    letter-spacing: 0.02em;
+    max-width: 600px;
+    width: 90%;
+    line-height: 1.4;
+    position: relative;
+    animation: gentlepulse 3s ease-in-out infinite;
+  }
+
+  .miss-you-btn:hover {
+    transform: translateY(-4px) scale(1.02);
+    box-shadow: 8px 10px 0 var(--caramel);
+  }
+
+  .miss-you-btn:active {
+    transform: translateY(2px);
+    box-shadow: 2px 2px 0 var(--caramel);
+  }
+
+  .miss-you-btn.clicked {
+    background: #b07fc7;
+    box-shadow: 6px 6px 0 #9b5fba;
+    animation: none;
+  }
+
+  .miss-you-after {
+    display: none;
+  }
+
+  .miss-you-btn.clicked .miss-you-text {
+    display: none;
+  }
+
+  .miss-you-btn.clicked .miss-you-after {
+    display: inline;
+  }
+
+  @keyframes gentlepulse {
+    0%, 100% { transform: scale(1); box-shadow: 6px 6px 0 var(--caramel); }
+    50% { transform: scale(1.02); box-shadow: 8px 8px 0 var(--caramel); }
+  }
+
   /* SURPRISE BUTTON */
   .surprise-btn {
     background: #b07fc7;
@@ -933,6 +987,14 @@ I love you. I terribly miss u. And everyday i wish and want u back zu — i hope
     <p class="journal-footer-note reveal">more entries coming — watch this space, zu 🌿</p>
   </div>
 </section>
+
+
+<div style="text-align:center; padding: 3rem 2rem;">
+  <button class="miss-you-btn" onclick="this.classList.toggle('clicked')">
+    <span class="miss-you-text">i miss u so much i am waiting for u 🌹</span>
+    <span class="miss-you-after">always & forever zu 🌹</span>
+  </button>
+</div>
 
 <!-- FOOTER -->
 <footer>
