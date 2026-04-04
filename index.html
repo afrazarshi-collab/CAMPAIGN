@@ -28,6 +28,26 @@
     cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Ctext y='18' font-size='18'%3E🌹%3C/text%3E%3C/svg%3E"), auto;
   }
 
+
+  /* SHAYARI */
+  .hero-shayari {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(0.85rem, 2.5vw, 1.05rem);
+    color: var(--brown);
+    font-style: italic;
+    line-height: 1.9;
+    max-width: 480px;
+    text-align: center;
+    position: relative;
+    z-index: 1;
+    opacity: 0;
+    animation: fadeUp 0.8s 0.6s forwards;
+    margin-bottom: 0.5rem;
+    padding: 0.8rem 1.2rem;
+    border-left: 3px solid var(--caramel);
+    border-right: 3px solid var(--caramel);
+  }
+
   /* FLOATING DOODLES */
   .doodle {
     position: fixed;
@@ -474,6 +494,23 @@
     margin-top: 0.5rem;
   }
 
+
+
+  /* FOOTER SHAYARI */
+  .footer-shayari {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(1rem, 3vw, 1.3rem);
+    color: var(--brown);
+    font-style: italic;
+    line-height: 2;
+    max-width: 520px;
+    margin: 0 auto;
+    text-align: center;
+    padding: 1.5rem 2rem;
+    border-top: 2px solid var(--biscuit);
+    border-bottom: 2px solid var(--biscuit);
+    animation: gentlepulse 3s ease-in-out infinite;
+  }
 
   /* MISS YOU BUTTON */
   .miss-you-btn {
@@ -964,6 +1001,7 @@
     Hey there,
     <span>Tim Tams 🤎</span>
   </h1>
+  <p class="hero-shayari">Mohabbat mein nahīn hai farq jiine aur marne kā<br>Usī ko dekh kar jiite haiñ jis kāfir pe dam nikle</p>
   <p class="hero-desc">this is a small something i made for u zu to bring a smile to ur face. You look very beautiful when you smile 🤎</p>
   <div class="months-pill">🗓️ 8 beautiful months together</div>
   <p class="scroll-hint">↓ scroll for all the good stuff ↓</p>
@@ -1453,10 +1491,7 @@ Enough yap. BYE TAKE CARE GOODNIGHT I LOVE U MY MWAH 🌹</div>
 
 
 <div style="text-align:center; padding: 3rem 2rem;">
-  <button class="miss-you-btn" onclick="this.classList.toggle('clicked')">
-    <span class="miss-you-text">i miss u so much i am waiting for u 🌹</span>
-    <span class="miss-you-after">always & forever zu 🌹</span>
-  </button>
+  <p class="footer-shayari">Ishq par zor nahīñ hai ye vo ātish 'ġhālib'<br>ki lagāe na lage aur bujhāe na bane</p>
 </div>
 
 <!-- FOOTER -->
