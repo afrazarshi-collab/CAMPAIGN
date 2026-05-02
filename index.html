@@ -711,9 +711,9 @@ mark{background:rgba(201,168,76,0.25);color:var(--gold);border-radius:2px;paddin
     }
   }
 
-  // Returns true if a name string matches the admin name
+  // Returns true if a name string matches the admin name (visible to ALL users)
   function nameIsAdmin(name) {
-    return isAdmin() && name && name.trim().toLowerCase() === ADMIN_NAME.toLowerCase();
+    return name && name.trim().toLowerCase() === ADMIN_NAME.toLowerCase();
   }
 </script>
 
@@ -751,7 +751,6 @@ const VOTED_KEY = 'afraz_vb_voted_v1';
 const getVoted  = () => { try { return JSON.parse(localStorage.getItem(VOTED_KEY)||'[]'); } catch(e){ return []; } };
 const markVoted = id => { const v=getVoted(); if(!v.includes(id)){ v.push(id); localStorage.setItem(VOTED_KEY,JSON.stringify(v)); } };
 const hasVoted  = id => getVoted().includes(id);
-const pendingVotes = {}; // tracks optimistic +1s not yet confirmed by Firestore
 
 // ─── BOOT ─────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
@@ -782,7 +781,19 @@ function subscribePostsRealtime() {
   const q = query(collection(db, 'posts'), orderBy('created_at', 'desc'));
   onSnapshot(q, snapshot => {
     const prevLen = allPosts.length;
-    allPosts = snapshot.docs.map(d => toPost(d.id, d.data()));
+    // Build new posts from server, but preserve optimistic vote count if we voted and
+    // the server hasn't caught up yet (server value lower than our local value)
+    const localVoteMap = {};
+    allPosts.forEach(p => { localVoteMap[p.id] = p.votes; });
+
+    allPosts = snapshot.docs.map(d => {
+      const p = toPost(d.id, d.data());
+      // If we've voted on this post and server is behind, keep local count
+      if (hasVoted(p.id) && localVoteMap[p.id] !== undefined && localVoteMap[p.id] > p.votes) {
+        p.votes = localVoteMap[p.id];
+      }
+      return p;
+    });
     document.getElementById('connecting').classList.add('hidden');
     renderAll();
     if (prevLen > 0 && allPosts.length > prevLen) {
@@ -823,15 +834,13 @@ function unsubscribeReplies(postId) {
 
 // ─── DATA MAPPERS ─────────────────────────────────────────────────────────────
 function toPost(id, data) {
-  const serverVotes = data.votes || 0;
-  const pending     = pendingVotes[id] || 0;
   return {
     id,
     name:  data.name  || null,
     anon:  !!data.anon,
     text:  data.text,
     tag:   data.tag   || 'General',
-    votes: serverVotes + pending,
+    votes: data.votes || 0,
     ts:    data.created_at ? data.created_at.toMillis() : Date.now()
   };
 }
@@ -892,24 +901,27 @@ window.submitPost = async function() {
 window.upvote = async function(id) {
   if (hasVoted(id)) { showToast('You already supported this one!'); return; }
   markVoted(id);
-  // Optimistic local update immediately
-  pendingVotes[id] = (pendingVotes[id] || 0) + 1;
+
+  // Optimistic update: mutate local post immediately so UI feels instant
   const local = allPosts.find(p => p.id === id);
   if (local) local.votes++;
   renderAll();
   showToast('Support recorded! ▲');
+
   if (!KEYS_OK) return;
   try {
-    // Read current votes from Firestore then write newVal (avoids increment permission issues)
     const snap = await getDoc(doc(db, 'posts', id));
     if (snap.exists()) {
-      const currentVotes = snap.data().votes || 0;
-      await updateDoc(doc(db, 'posts', id), { votes: currentVotes + 1 });
+      const serverVotes = snap.data().votes || 0;
+      await updateDoc(doc(db, 'posts', id), { votes: serverVotes + 1 });
+      // Firestore onSnapshot will fire and update allPosts from server — no double-add needed
     }
-    delete pendingVotes[id];
   } catch(e) {
     console.error('Upvote error:', e);
-    delete pendingVotes[id];
+    // Revert optimistic update on failure
+    if (local) local.votes--;
+    renderAll();
+    showToast('Could not record vote — try again.');
   }
 };
 
