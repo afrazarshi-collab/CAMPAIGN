@@ -453,6 +453,41 @@ footer strong{color:var(--gold);}
 
 /* SEARCH HIGHLIGHT */
 mark{background:rgba(201,168,76,0.25);color:var(--gold);border-radius:2px;padding:0 2px;}
+
+/* ADMIN BADGE */
+.admin-badge {
+  display:inline-flex; align-items:center; gap:4px;
+  background:linear-gradient(135deg,#C9A84C,#e0bc68);
+  color:#08111e; font-size:9px; font-weight:800;
+  letter-spacing:1.2px; text-transform:uppercase;
+  padding:2px 7px; border-radius:10px;
+  box-shadow:0 0 8px rgba(201,168,76,0.45);
+  vertical-align:middle; margin-left:4px;
+  font-family:'DM Sans',sans-serif;
+  animation: adminGlow 2.5s ease-in-out infinite;
+}
+@keyframes adminGlow {
+  0%,100%{box-shadow:0 0 6px rgba(201,168,76,0.4);}
+  50%{box-shadow:0 0 14px rgba(201,168,76,0.75);}
+}
+.post-author.is-admin { color:var(--gold); }
+.post-avatar.is-admin {
+  background:linear-gradient(135deg,#C9A84C,#e0bc68);
+  color:var(--navy); border-color:var(--gold);
+}
+.reply-avatar.is-admin {
+  background:linear-gradient(135deg,#C9A84C,#e0bc68);
+  color:var(--navy); border-color:var(--gold);
+}
+/* Admin indicator in header when logged in */
+#admin-indicator {
+  display:none; align-items:center; gap:6px;
+  background:rgba(201,168,76,0.12); border:1px solid var(--border2);
+  border-radius:20px; padding:4px 12px; font-size:11px; color:var(--gold);
+  font-weight:600; letter-spacing:1px; cursor:pointer;
+}
+#admin-indicator.active { display:flex; }
+#admin-indicator:hover { background:rgba(201,168,76,0.2); }
 </style>
 </head>
 <body>
@@ -475,6 +510,7 @@ mark{background:rgba(201,168,76,0.25);color:var(--gold);border-radius:2px;paddin
   </a>
   <div class="header-right">
     <span id="header-count">— voices</span>
+    <div id="admin-indicator" title="You are logged in as admin. Click to log out.">👑 OWNER</div>
     <div class="live-pill"><div class="live-dot"></div><span>Live</span></div>
   </div>
 </header>
@@ -627,6 +663,60 @@ mark{background:rgba(201,168,76,0.25);color:var(--gold);border-radius:2px;paddin
 <!-- Scroll to top -->
 <button id="scroll-top" onclick="window.scrollTo({top:0,behavior:'smooth'})" title="Back to top">↑</button>
 
+<!-- Admin Recognition System -->
+<script>
+  // ─── ADMIN CONFIG ─────────────────────────────────────────────────────────────
+  // The secret token that grants admin status on this device.
+  // To activate: visit this page with ?admin=YOUR_SECRET_TOKEN in the URL once.
+  // After that, this device is permanently recognized as admin.
+  // To revoke: click the 👑 OWNER badge in the header, or clear localStorage.
+  const ADMIN_SECRET   = 'afraz2024owner';  // ← Change this to your own secret
+  const ADMIN_NAME     = 'Afraz Umair';     // ← Your name as it appears in posts
+  const ADMIN_STORE_KEY = 'afraz_vb_admin_v1';
+
+  // Check URL for ?admin=TOKEN activation
+  (function() {
+    const params = new URLSearchParams(window.location.search);
+    const token  = params.get('admin');
+    if (token === ADMIN_SECRET) {
+      localStorage.setItem(ADMIN_STORE_KEY, ADMIN_SECRET);
+      // Strip the param from URL so it's not visible
+      const clean = window.location.pathname + window.location.hash;
+      history.replaceState(null, '', clean);
+    }
+  })();
+
+  function isAdmin() {
+    return localStorage.getItem(ADMIN_STORE_KEY) === ADMIN_SECRET;
+  }
+
+  function revokeAdmin() {
+    localStorage.removeItem(ADMIN_STORE_KEY);
+    document.getElementById('admin-indicator').classList.remove('active');
+    showToast('Admin session ended.');
+    // Re-render so badges disappear
+    if (typeof renderAll === 'function') renderAll();
+  }
+
+  // Show/hide the admin indicator badge in header
+  function syncAdminUI() {
+    const ind = document.getElementById('admin-indicator');
+    if (isAdmin()) {
+      ind.classList.add('active');
+      ind.onclick = () => {
+        if (confirm('Log out of admin / owner mode on this device?')) revokeAdmin();
+      };
+    } else {
+      ind.classList.remove('active');
+    }
+  }
+
+  // Returns true if a name string matches the admin name
+  function nameIsAdmin(name) {
+    return isAdmin() && name && name.trim().toLowerCase() === ADMIN_NAME.toLowerCase();
+  }
+</script>
+
 <!-- Firebase SDK -->
 <script type="module">
 import { initializeApp }
@@ -665,6 +755,7 @@ const pendingVotes = {}; // tracks optimistic +1s not yet confirmed by Firestore
 
 // ─── BOOT ─────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
+  syncAdminUI();
   setupTagChips();
   setupFilterPills();
   setupCharCount();
@@ -913,11 +1004,15 @@ function refreshReplyPanel(postId) {
 }
 
 function replyHTML(r) {
+  const isAdminReply = nameIsAdmin(r.name);
+  const avatarClass  = isAdminReply ? 'reply-avatar is-admin' : 'reply-avatar';
+  const badgeHTML    = isAdminReply ? `<span class="admin-badge">👑 Owner</span>` : '';
+  const nameDisplay  = r.name ? esc(r.name) : 'Anonymous';
   return `<div class="reply-item">
-    <div class="reply-avatar">${getInitials(r.name)}</div>
+    <div class="${avatarClass}">${getInitials(r.name)}</div>
     <div style="flex:1">
       <div class="reply-bubble">${esc(r.text)}</div>
-      <div class="reply-bubble-meta">${r.name ? esc(r.name) : 'Anonymous'} · ${timeAgo(r.ts)}</div>
+      <div class="reply-bubble-meta">${nameDisplay}${badgeHTML} · ${timeAgo(r.ts)}</div>
     </div>
   </div>`;
 }
@@ -1000,6 +1095,13 @@ function renderFeed(posts, query) {
       ? esc(p.text).replace(new RegExp(`(${escRegex(query)})`, 'gi'), '<mark>$1</mark>')
       : esc(p.text);
 
+    // Admin badge
+    const isAdminPost = !p.anon && nameIsAdmin(p.name);
+    const adminBadgeHTML = isAdminPost
+      ? `<span class="admin-badge">👑 Owner</span>` : '';
+    const avatarClass = isAdminPost ? 'post-avatar is-admin' : 'post-avatar';
+    const authorClass = isAdminPost ? 'post-author is-admin' : 'post-author';
+
     return `
       <div class="post-card ${isTop ? 'pinned' : ''}" id="post-${p.id}">
         ${isTop ? `<div class="pin-ribbon">⭐ Most Supported</div>` : ''}
@@ -1016,10 +1118,10 @@ function renderFeed(posts, query) {
           </div>
           <div class="post-content">
             <div class="post-meta">
-              <div class="post-avatar">${getInitials(p.name)}</div>
+              <div class="${avatarClass}">${getInitials(p.name)}</div>
               ${p.anon
                 ? `<span class="post-anon">Anonymous</span>`
-                : `<span class="post-author">${esc(p.name || '')}</span>`}
+                : `<span class="${authorClass}">${esc(p.name || '')}${adminBadgeHTML}</span>`}
               <span class="post-tag-pill tag-${p.tag}">${p.tag}</span>
               <span class="post-time">${timeAgo(p.ts)}</span>
             </div>
@@ -1073,11 +1175,14 @@ function updateStats(all) {
   const sorted = Object.entries(tagMap).sort((a, b) => b[1] - a[1]);
   const topTag = sorted[0];
 
+  // Fix: update header-count immediately (no animation) so it's never stale
+  const hc = document.getElementById('header-count');
+  hc.textContent = `${all.length} ${all.length === 1 ? 'voice' : 'voices'}`;
+
   animNum('stat-posts', all.length);
   animNum('stat-votes', totalVotes);
   animNum('stat-tags',  sorted.length);
 
-  document.getElementById('header-count').textContent = `${all.length} ${all.length === 1 ? 'voice' : 'voices'}`;
   document.getElementById('sb-posts').textContent = all.length;
   document.getElementById('sb-votes').textContent = totalVotes;
   document.getElementById('sb-anon').textContent  = anonCount;
@@ -1221,7 +1326,8 @@ const _timers = {};
 function animNum(id, target) {
   const el = document.getElementById(id);
   if (!el) return;
-  const cur = parseInt(el.textContent) || 0;
+  const raw = el.textContent.trim();
+  const cur = (raw === '—' || raw === '') ? 0 : (parseInt(raw) || 0);
   if (cur === target) return;
   clearInterval(_timers[id]);
   let v = cur;
