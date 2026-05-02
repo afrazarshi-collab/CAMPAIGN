@@ -519,7 +519,7 @@ mark{background:rgba(201,168,76,0.25);color:var(--gold);border-radius:2px;paddin
   </a>
   <div class="header-right">
     <span id="header-count">— voices</span>
-    <div id="admin-indicator" title="You are logged in as admin. Click to log out.">👑 OWNER</div>
+    <div id="admin-indicator">👑 OWNER</div>
     <div class="live-pill"><div class="live-dot"></div><span>Live</span></div>
   </div>
 </header>
@@ -672,38 +672,6 @@ mark{background:rgba(201,168,76,0.25);color:var(--gold);border-radius:2px;paddin
 <!-- Scroll to top -->
 <button id="scroll-top" onclick="window.scrollTo({top:0,behavior:'smooth'})" title="Back to top">↑</button>
 
-<!-- Admin Recognition System -->
-<script>
-  // ─── ADMIN CONFIG ─────────────────────────────────────────────────────────────
-  // HOW TO CLAIM OWNER STATUS (one-time setup):
-  //   1. Open your site in your browser
-  //   2. Add ?setup-owner=afraz2024owner to the URL and press Enter
-  //   3. You'll see "This device is now the owner!" — done forever.
-  // Your Firebase Anonymous Auth UID is saved to Firestore as the owner.
-  // Nobody else can fake this — it's tied to your actual Firebase identity.
-  const ADMIN_SECRET = 'afraz2024owner';  // ← Change this to something only you know
-
-  // isAdmin() — true only when this device's Firebase UID matches the registered owner UID
-  function isAdmin() {
-    return !!(currentUID && adminUID && currentUID === adminUID);
-  }
-
-  // Show/hide the owner pill in the header
-  function syncAdminUI() {
-    const ind = document.getElementById('admin-indicator');
-    if (isAdmin()) {
-      ind.classList.add('active');
-    } else {
-      ind.classList.remove('active');
-    }
-  }
-
-  // Badge is based on the isAdmin field written to Firestore at post time — not name
-  function nameIsAdmin(postOrReply) {
-    return !!postOrReply.isAdmin;
-  }
-</script>
-
 <!-- Firebase SDK -->
 <script type="module">
 import { initializeApp }
@@ -729,6 +697,28 @@ if (KEYS_OK) {
   const app = initializeApp(FIREBASE_CONFIG);
   db   = getFirestore(app);
   auth = getAuth(app);
+}
+
+// ─── ADMIN CONFIG ────────────────────────────────────────────────────────────
+// HOW TO CLAIM OWNER STATUS (one-time setup):
+//   Visit your site once with ?setup-owner=afraz2024owner added to the URL.
+//   You'll see "This device is now the owner!" — your Firebase UID is saved to Firestore.
+//   Nobody else can fake it. Change ADMIN_SECRET to something only you know.
+const ADMIN_SECRET = 'afraz2024owner';
+
+function isAdmin() {
+  return !!(currentUID && adminUID && currentUID === adminUID);
+}
+
+function syncAdminUI() {
+  const ind = document.getElementById('admin-indicator');
+  if (!ind) return;
+  ind.classList.toggle('active', isAdmin());
+}
+
+// Badge is driven by the isAdmin field in Firestore — not by name matching
+function postIsAdmin(postOrReply) {
+  return !!postOrReply.isAdmin;
 }
 
 // ─── STATE ────────────────────────────────────────────────────────────────────
@@ -1032,7 +1022,7 @@ function refreshReplyPanel(postId) {
 }
 
 function replyHTML(r) {
-  const isAdminReply = nameIsAdmin(r);
+  const isAdminReply = postIsAdmin(r);
   const avatarClass  = isAdminReply ? 'reply-avatar is-admin' : 'reply-avatar';
   const badgeHTML    = isAdminReply ? `<span class="admin-badge">👑 Owner</span>` : '';
   const nameDisplay  = r.name ? esc(r.name) : 'Anonymous';
@@ -1124,7 +1114,7 @@ function renderFeed(posts, query) {
       : esc(p.text);
 
     // Admin badge
-    const isAdminPost = !p.anon && nameIsAdmin(p);
+    const isAdminPost = !p.anon && postIsAdmin(p);
     const adminBadgeHTML = isAdminPost
       ? `<span class="admin-badge">👑 Owner</span>` : '';
     const avatarClass = isAdminPost ? 'post-avatar is-admin' : 'post-avatar';
