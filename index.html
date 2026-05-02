@@ -661,6 +661,7 @@ const VOTED_KEY = 'afraz_vb_voted_v1';
 const getVoted  = () => { try { return JSON.parse(localStorage.getItem(VOTED_KEY)||'[]'); } catch(e){ return []; } };
 const markVoted = id => { const v=getVoted(); if(!v.includes(id)){ v.push(id); localStorage.setItem(VOTED_KEY,JSON.stringify(v)); } };
 const hasVoted  = id => getVoted().includes(id);
+const pendingVotes = {}; // tracks optimistic +1s not yet confirmed by Firestore
 
 // ─── BOOT ─────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
@@ -731,13 +732,15 @@ function unsubscribeReplies(postId) {
 
 // ─── DATA MAPPERS ─────────────────────────────────────────────────────────────
 function toPost(id, data) {
+  const serverVotes = data.votes || 0;
+  const pending     = pendingVotes[id] || 0;
   return {
     id,
     name:  data.name  || null,
     anon:  !!data.anon,
     text:  data.text,
     tag:   data.tag   || 'General',
-    votes: data.votes || 0,
+    votes: serverVotes + pending,
     ts:    data.created_at ? data.created_at.toMillis() : Date.now()
   };
 }
@@ -798,6 +801,8 @@ window.submitPost = async function() {
 window.upvote = async function(id) {
   if (hasVoted(id)) { showToast('You already supported this one!'); return; }
   markVoted(id);
+  // Optimistic update: track pending so onSnapshot doesn't overwrite it
+  pendingVotes[id] = (pendingVotes[id] || 0) + 1;
   const local = allPosts.find(p => p.id === id);
   if (local) local.votes++;
   renderAll();
@@ -805,7 +810,14 @@ window.upvote = async function(id) {
   if (!KEYS_OK) return;
   try {
     await updateDoc(doc(db, 'posts', id), { votes: increment(1) });
-  } catch(e) { console.error('Upvote error:', e); }
+    // Once Firestore confirms, clear the pending offset
+    delete pendingVotes[id];
+  } catch(e) {
+    console.error('Upvote error:', e);
+    // Rollback on failure
+    delete pendingVotes[id];
+    markVoted(id); // keep voted so they can't spam on error
+  }
 };
 
 // ─── REPLY TOGGLE ─────────────────────────────────────────────────────────────
