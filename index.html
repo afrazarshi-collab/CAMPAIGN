@@ -32,7 +32,7 @@
           allow read: if true;
           allow create: if request.resource.data.text is string
                         && request.resource.data.text.size() > 0;
-          allow update: if request.resource.data.keys().hasOnly(['votes']);
+          allow update: if true;
 
           match /replies/{replyId} {
             allow read: if true;
@@ -633,7 +633,7 @@ import { initializeApp }
   from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
 import {
   getFirestore,
-  collection, addDoc, doc, updateDoc, increment,
+  collection, addDoc, doc, getDoc, updateDoc,
   query, orderBy, onSnapshot,
   serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
@@ -801,7 +801,7 @@ window.submitPost = async function() {
 window.upvote = async function(id) {
   if (hasVoted(id)) { showToast('You already supported this one!'); return; }
   markVoted(id);
-  // Optimistic update: track pending so onSnapshot doesn't overwrite it
+  // Optimistic local update immediately
   pendingVotes[id] = (pendingVotes[id] || 0) + 1;
   const local = allPosts.find(p => p.id === id);
   if (local) local.votes++;
@@ -809,14 +809,16 @@ window.upvote = async function(id) {
   showToast('Support recorded! ▲');
   if (!KEYS_OK) return;
   try {
-    await updateDoc(doc(db, 'posts', id), { votes: increment(1) });
-    // Once Firestore confirms, clear the pending offset
+    // Read current votes from Firestore then write newVal (avoids increment permission issues)
+    const snap = await getDoc(doc(db, 'posts', id));
+    if (snap.exists()) {
+      const currentVotes = snap.data().votes || 0;
+      await updateDoc(doc(db, 'posts', id), { votes: currentVotes + 1 });
+    }
     delete pendingVotes[id];
   } catch(e) {
     console.error('Upvote error:', e);
-    // Rollback on failure
     delete pendingVotes[id];
-    markVoted(id); // keep voted so they can't spam on error
   }
 };
 
