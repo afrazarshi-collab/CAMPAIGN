@@ -40,10 +40,19 @@
                           && request.resource.data.text.size() > 0;
           }
         }
+        // Owner config — only the current owner (or anyone if unset) can write
+        match /config/admin {
+          allow read: if true;
+          allow write: if !exists(/databases/$(database)/documents/config/admin)
+                       || request.auth.uid == resource.data.uid;
+        }
       }
     }
 
     Click Publish.
+
+    *** ALSO — Enable Anonymous Authentication ***
+    In Firebase Console: Authentication → Sign-in method → Anonymous → Enable → Save
 
   STEP 3 — Register a web app and paste keys below
     Project Overview (home) → click </> (Web) icon → Register app
@@ -666,52 +675,30 @@ mark{background:rgba(201,168,76,0.25);color:var(--gold);border-radius:2px;paddin
 <!-- Admin Recognition System -->
 <script>
   // ─── ADMIN CONFIG ─────────────────────────────────────────────────────────────
-  // The secret token that grants admin status on this device.
-  // To activate: visit this page with ?admin=YOUR_SECRET_TOKEN in the URL once.
-  // After that, this device is permanently recognized as admin.
-  // To revoke: click the 👑 OWNER badge in the header, or clear localStorage.
-  const ADMIN_SECRET   = 'afraz2024owner';  // ← Change this to your own secret
-  const ADMIN_NAME     = 'Afraz Umair';     // ← Your name as it appears in posts
-  const ADMIN_STORE_KEY = 'afraz_vb_admin_v1';
+  // HOW TO CLAIM OWNER STATUS (one-time setup):
+  //   1. Open your site in your browser
+  //   2. Add ?setup-owner=afraz2024owner to the URL and press Enter
+  //   3. You'll see "This device is now the owner!" — done forever.
+  // Your Firebase Anonymous Auth UID is saved to Firestore as the owner.
+  // Nobody else can fake this — it's tied to your actual Firebase identity.
+  const ADMIN_SECRET = 'afraz2024owner';  // ← Change this to something only you know
 
-  // Check URL for ?admin=TOKEN activation
-  (function() {
-    const params = new URLSearchParams(window.location.search);
-    const token  = params.get('admin');
-    if (token === ADMIN_SECRET) {
-      localStorage.setItem(ADMIN_STORE_KEY, ADMIN_SECRET);
-      // Strip the param from URL so it's not visible
-      const clean = window.location.pathname + window.location.hash;
-      history.replaceState(null, '', clean);
-    }
-  })();
-
+  // isAdmin() — true only when this device's Firebase UID matches the registered owner UID
   function isAdmin() {
-    return localStorage.getItem(ADMIN_STORE_KEY) === ADMIN_SECRET;
+    return !!(currentUID && adminUID && currentUID === adminUID);
   }
 
-  function revokeAdmin() {
-    localStorage.removeItem(ADMIN_STORE_KEY);
-    document.getElementById('admin-indicator').classList.remove('active');
-    showToast('Admin session ended.');
-    // Re-render so badges disappear
-    if (typeof renderAll === 'function') renderAll();
-  }
-
-  // Show/hide the admin indicator badge in header
+  // Show/hide the owner pill in the header
   function syncAdminUI() {
     const ind = document.getElementById('admin-indicator');
     if (isAdmin()) {
       ind.classList.add('active');
-      ind.onclick = () => {
-        if (confirm('Log out of admin / owner mode on this device?')) revokeAdmin();
-      };
     } else {
       ind.classList.remove('active');
     }
   }
 
-  // Returns true if a post/reply object was verified as admin when submitted
+  // Badge is based on the isAdmin field written to Firestore at post time — not name
   function nameIsAdmin(postOrReply) {
     return !!postOrReply.isAdmin;
   }
@@ -723,17 +710,25 @@ import { initializeApp }
   from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
 import {
   getFirestore,
-  collection, addDoc, doc, updateDoc,
+  collection, addDoc, doc, getDoc, setDoc, updateDoc,
   query, orderBy, onSnapshot,
   serverTimestamp, increment
 } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+import {
+  getAuth, signInAnonymously, onAuthStateChanged
+} from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
 
 // ─── DB INIT ──────────────────────────────────────────────────────────────────
 const KEYS_OK = FIREBASE_CONFIG.apiKey !== 'PASTE_apiKey_HERE';
-let db = null;
+let db   = null;
+let auth = null;
+let currentUID = null;   // Firebase Anonymous Auth UID for this device
+let adminUID   = null;   // The UID registered as owner (loaded from Firestore)
+
 if (KEYS_OK) {
   const app = initializeApp(FIREBASE_CONFIG);
-  db = getFirestore(app);
+  db   = getFirestore(app);
+  auth = getAuth(app);
 }
 
 // ─── STATE ────────────────────────────────────────────────────────────────────
@@ -754,7 +749,6 @@ const hasVoted  = id => getVoted().includes(id);
 
 // ─── BOOT ─────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
-  syncAdminUI();
   setupTagChips();
   setupFilterPills();
   setupCharCount();
@@ -765,16 +759,48 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('setup-banner').classList.add('show');
     document.getElementById('connecting').classList.add('hidden');
     allPosts = DEMO_POSTS;
-    // Seed demo replies
     repliesStore['d1'] = [
-      { name: 'Afraz Umair', text: 'Totally agree — I will bring this up at the next canteen review meeting.', ts: Date.now()-1800000 }
+      { name: 'Afraz Umair', isAdmin: true, text: 'Totally agree — I will bring this up at the next canteen review meeting.', ts: Date.now()-1800000 }
     ];
     renderAll();
     return;
   }
 
-  subscribePostsRealtime();
+  // Sign in anonymously — gives each device a persistent unique UID
+  signInAnonymously(auth).catch(err => {
+    console.error('Auth error:', err);
+    // Fall back to starting without auth
+    bootApp();
+  });
+
+  onAuthStateChanged(auth, async user => {
+    if (!user) return;
+    currentUID = user.uid;
+
+    // ── OWNER SETUP: visit ?setup-owner once to claim your UID ──────────────
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('setup-owner') === ADMIN_SECRET) {
+      await setDoc(doc(db, 'config', 'admin'), { uid: currentUID });
+      history.replaceState(null, '', window.location.pathname);
+      showToast('✅ This device is now the owner!');
+    }
+
+    // Load the registered owner UID from Firestore
+    try {
+      const snap = await getDoc(doc(db, 'config', 'admin'));
+      if (snap.exists()) adminUID = snap.data().uid;
+    } catch(e) {
+      console.warn('Could not load admin config:', e);
+    }
+
+    syncAdminUI();
+    bootApp();
+  });
 });
+
+function bootApp() {
+  subscribePostsRealtime();
+}
 
 // ─── REAL-TIME POSTS ──────────────────────────────────────────────────────────
 function subscribePostsRealtime() {
