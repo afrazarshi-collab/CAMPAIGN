@@ -462,6 +462,31 @@ footer strong{color:var(--gold);}
   .submit-btn{width:100%;text-align:center}
 }
 
+
+/* ADMIN LOGIN MODAL */
+#admin-modal {
+  display:none; position:fixed; inset:0; z-index:600;
+  background:rgba(8,17,30,0.88); backdrop-filter:blur(6px);
+  align-items:center; justify-content:center;
+}
+#admin-modal.open { display:flex; }
+#admin-modal-box {
+  background:var(--card); border:1px solid var(--border2);
+  border-radius:var(--radius); padding:28px 24px; width:300px; max-width:90vw;
+}
+#admin-modal-box h3 {
+  font-family:'Bebas Neue',sans-serif; font-size:18px; letter-spacing:2px;
+  color:var(--gold); margin-bottom:16px;
+}
+#admin-pw-input {
+  width:100%; background:var(--navy3); border:1px solid var(--border2);
+  border-radius:var(--radius-sm); color:var(--white);
+  font-family:'DM Sans',sans-serif; font-size:14px;
+  padding:10px 14px; outline:none; margin-bottom:14px; display:block;
+}
+#admin-pw-input:focus { border-color:var(--gold); }
+.admin-modal-btns { display:flex; gap:10px; justify-content:flex-end; }
+
 /* SEARCH HIGHLIGHT */
 mark{background:rgba(201,168,76,0.25);color:var(--gold);border-radius:2px;padding:0 2px;}
 
@@ -523,7 +548,7 @@ mark{background:rgba(201,168,76,0.25);color:var(--gold);border-radius:2px;paddin
   </a>
   <div class="header-right">
     <span id="header-count">— voices</span>
-    <div id="admin-indicator" onclick="promptAdminLogin()" title="Click to log in as owner">👑 OWNER</div>
+    <div id="admin-indicator" title="Click to log in as owner">👑 OWNER</div>
     <div class="live-pill"><div class="live-dot"></div><span>Live</span></div>
   </div>
 </header>
@@ -660,6 +685,20 @@ mark{background:rgba(201,168,76,0.25);color:var(--gold);border-radius:2px;paddin
 
 <div class="toast" id="toast"></div>
 
+
+<!-- Owner Login Modal -->
+<div id="admin-modal">
+  <div id="admin-modal-box">
+    <h3>👑 Owner Login</h3>
+    <input type="password" id="admin-pw-input" placeholder="Enter password…"
+      onkeydown="if(event.key==='Enter') submitAdminLogin()">
+    <div class="admin-modal-btns">
+      <button class="modal-btn" id="admin-cancel-btn">Cancel</button>
+      <button class="modal-btn primary" id="admin-submit-btn">Unlock</button>
+    </div>
+  </div>
+</div>
+
 <!-- Share Modal -->
 <div class="modal-overlay" id="share-modal" onclick="closeShareModal(event)">
   <div class="modal-box">
@@ -722,11 +761,7 @@ async function tryUnlockAdmin(password) {
   }
 }
 
-window.promptAdminLogin = function() {
-  if (_adminUnlocked) { showToast('👑 Owner mode is active'); return; }
-  const pw = prompt('Enter owner password:');
-  if (pw) tryUnlockAdmin(pw.trim());
-};
+// Admin modal wired via addEventListener in DOMContentLoaded below
 
 function syncAdminUI() {
   const ind = document.getElementById('admin-indicator');
@@ -766,6 +801,35 @@ document.addEventListener('DOMContentLoaded', () => {
   setupScrollTop();
   setupAnonCheck();
   syncAdminUI();
+
+  // ── Admin modal wiring ──────────────────────────────────────────────────────
+  const adminBtn   = document.getElementById('admin-indicator');
+  const adminModal = document.getElementById('admin-modal');
+  const adminInput = document.getElementById('admin-pw-input');
+  const adminSubmit= document.getElementById('admin-submit-btn');
+  const adminCancel= document.getElementById('admin-cancel-btn');
+
+  function openAdminModal() {
+    if (_adminUnlocked) { showToast('👑 Owner mode is active'); return; }
+    adminModal.classList.add('open');
+    setTimeout(() => adminInput.focus(), 50);
+  }
+  function closeAdminModal() {
+    adminModal.classList.remove('open');
+    adminInput.value = '';
+  }
+  function doAdminLogin() {
+    const pw = adminInput.value.trim();
+    closeAdminModal();
+    if (pw) tryUnlockAdmin(pw);
+  }
+
+  adminBtn.addEventListener('click', openAdminModal);
+  adminSubmit.addEventListener('click', doAdminLogin);
+  adminCancel.addEventListener('click', closeAdminModal);
+  adminModal.addEventListener('click', e => { if (e.target === adminModal) closeAdminModal(); });
+  adminInput.addEventListener('keydown', e => { if (e.key === 'Enter') doAdminLogin(); });
+  // ────────────────────────────────────────────────────────────────────────────
 
   if (!KEYS_OK) {
     document.getElementById('setup-banner').classList.add('show');
