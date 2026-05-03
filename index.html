@@ -1,0 +1,1426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Afraz Umair — Voice Board</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Instrument+Serif:ital@0;1&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&display=swap" rel="stylesheet">
+
+<!--
+=================================================================
+  SETUP — 3 STEPS, TAKES 3 MINUTES (Firebase — 100% free)
+=================================================================
+
+  STEP 1 — Create project
+    Go to https://console.firebase.google.com
+    Sign in with Google → "Add project" → give it a name → Continue
+    (Disable Google Analytics if asked — not needed) → Create project
+
+  STEP 2 — Enable Firestore database
+    In your project: Build → Firestore Database → Create database
+    Choose "Start in test mode" → select a region → Done
+
+    *** IMPORTANT — Set these Firestore Rules ***
+    In Firestore → Rules tab, replace the rules with:
+
+    rules_version = '2';
+    service cloud.firestore {
+      match /databases/{database}/documents {
+        match /posts/{postId} {
+          allow read: if true;
+          allow create: if request.resource.data.text is string
+                        && request.resource.data.text.size() > 0;
+          allow update: if true;
+
+          match /replies/{replyId} {
+            allow read: if true;
+            allow create: if request.resource.data.text is string
+                          && request.resource.data.text.size() > 0;
+          }
+        }
+        // Owner config — only the current owner (or anyone if unset) can write
+        match /config/admin {
+          allow read: if true;
+          allow write: if !exists(/databases/$(database)/documents/config/admin)
+                       || request.auth.uid == resource.data.uid;
+        }
+      }
+    }
+
+    Click Publish.
+
+    *** ALSO — Enable Anonymous Authentication ***
+    In Firebase Console: Authentication → Sign-in method → Anonymous → Enable → Save
+
+  STEP 3 — Register a web app and paste keys below
+    Project Overview (home) → click </> (Web) icon → Register app
+    Give it a nickname (e.g. voiceboard) → Continue
+    You will see a firebaseConfig object. Copy the values below.
+
+=================================================================
+-->
+<script>
+  const FIREBASE_CONFIG = {
+    apiKey:            'AIzaSyCFX_jsdpErKJzUy6cIEVOpAB9gO4YKLyc',
+    authDomain:        'campaign-b03a7.firebaseapp.com',
+    projectId:         'campaign-b03a7',
+    storageBucket:     'campaign-b03a7.firebasestorage.app',
+    messagingSenderId: '215310470946',
+    appId:             '1:215310470946:web:a8025aa94e2c4383d71f7b',
+  };
+</script>
+
+<style>
+*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+:root {
+  --navy:   #08111e; --navy2: #0d1b2e; --navy3: #112236; --navy4: #162840;
+  --gold:   #C9A84C; --gold2: #e0bc68;
+  --white:  #eef2f8; --muted: #6b85a0; --muted2: #4a637a;
+  --card:   #0f1f33; --border: rgba(201,168,76,0.12); --border2: rgba(201,168,76,0.25);
+  --radius: 14px; --radius-sm: 8px;
+}
+html { scroll-behavior:smooth; }
+body {
+  background:var(--navy); color:var(--white);
+  font-family:'DM Sans',sans-serif; font-size:15px; line-height:1.6;
+  min-height:100vh; overflow-x:hidden;
+}
+body::before {
+  content:''; position:fixed; inset:0; pointer-events:none; z-index:0;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  opacity:0.025;
+}
+::-webkit-scrollbar{width:4px} ::-webkit-scrollbar-track{background:var(--navy)} ::-webkit-scrollbar-thumb{background:var(--gold);border-radius:2px}
+
+/* CONNECTING OVERLAY */
+#connecting {
+  position:fixed; inset:0; z-index:999; background:var(--navy);
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px;
+}
+#connecting.hidden { display:none; }
+.spinner {
+  width:40px; height:40px; border-radius:50%;
+  border:3px solid var(--border2); border-top-color:var(--gold);
+  animation:spin .8s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+#connecting p{font-size:14px;color:var(--muted);}
+
+/* SETUP BANNER */
+#setup-banner {
+  background:rgba(248,113,113,0.08); border-bottom:1px solid rgba(248,113,113,0.3);
+  padding:12px 24px; font-size:13px; color:#fca5a5; display:none;
+  align-items:center; gap:10px; flex-wrap:wrap;
+}
+#setup-banner.show{display:flex;}
+#setup-banner a{color:#f87171;font-weight:600;}
+
+/* HEADER */
+header {
+  position:sticky; top:0; z-index:200;
+  background:rgba(8,17,30,0.93); backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px);
+  border-bottom:1px solid var(--border2); padding:0 24px; height:64px;
+  display:flex; align-items:center; justify-content:space-between;
+}
+.logo{display:flex;align-items:center;gap:14px;text-decoration:none;}
+.logo-badge{
+  width:40px;height:40px;background:var(--gold);border-radius:10px;
+  display:flex;align-items:center;justify-content:center;
+  font-family:'Bebas Neue',sans-serif;font-size:18px;color:var(--navy);flex-shrink:0;
+}
+.logo-name{font-family:'Bebas Neue',sans-serif;font-size:17px;letter-spacing:2.5px;color:var(--white);line-height:1;display:block;}
+.logo-sub{font-size:10px;color:var(--gold);letter-spacing:2px;text-transform:uppercase;margin-top:2px;display:block;}
+.header-right{display:flex;align-items:center;gap:14px;}
+.live-pill{
+  display:flex;align-items:center;gap:7px;
+  background:rgba(74,222,128,0.1);border:1px solid rgba(74,222,128,0.25);
+  border-radius:20px;padding:5px 12px;font-size:12px;color:#4ade80;font-weight:500;
+}
+.live-dot{width:7px;height:7px;border-radius:50%;background:#4ade80;animation:livepulse 2s infinite;}
+@keyframes livepulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.8)}}
+#header-count{font-size:12px;color:var(--muted);}
+
+/* HERO */
+.hero{position:relative;padding:64px 24px 56px;text-align:center;overflow:hidden;}
+.hero::before{
+  content:'';position:absolute;top:-60px;left:50%;transform:translateX(-50%);
+  width:600px;height:300px;pointer-events:none;
+  background:radial-gradient(ellipse,rgba(201,168,76,0.12) 0%,transparent 70%);
+}
+.hero-eyebrow{
+  display:inline-flex;align-items:center;gap:8px;
+  background:rgba(201,168,76,0.1);border:1px solid var(--border2);
+  border-radius:20px;padding:6px 16px;font-size:11px;color:var(--gold);
+  letter-spacing:2px;text-transform:uppercase;font-weight:500;margin-bottom:24px;
+  animation:fadeUp .6s ease both;
+}
+.hero h1{
+  font-family:'Bebas Neue',sans-serif;font-size:clamp(52px,10vw,80px);
+  letter-spacing:4px;line-height:.95;color:var(--white);margin-bottom:8px;
+  animation:fadeUp .6s .1s ease both;
+}
+.hero h1 span{color:var(--gold);}
+.hero-sub{
+  font-family:'Instrument Serif',serif;font-style:italic;
+  font-size:clamp(16px,3vw,20px);color:var(--muted);margin-bottom:36px;
+  animation:fadeUp .6s .2s ease both;
+}
+.hero-stats{display:flex;align-items:center;justify-content:center;gap:32px;flex-wrap:wrap;animation:fadeUp .6s .3s ease both;}
+.hero-stat{text-align:center;}
+.hero-stat-num{font-family:'Bebas Neue',sans-serif;font-size:32px;color:var(--gold);line-height:1;display:block;}
+.hero-stat-label{font-size:11px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;}
+.hero-divider{width:1px;height:40px;background:var(--border2);}
+@keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:none}}
+
+/* LAYOUT */
+.layout{max-width:900px;margin:0 auto;padding:0 20px 80px;display:grid;grid-template-columns:1fr 300px;gap:24px;align-items:start;}
+@media(max-width:720px){.layout{grid-template-columns:1fr}.sidebar{order:-1}}
+
+/* COMPOSE */
+.compose-box{background:var(--card);border:1px solid var(--border2);border-radius:var(--radius);overflow:hidden;margin-bottom:20px;animation:fadeUp .5s .4s ease both;}
+.compose-header{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;}
+.compose-header-dot{width:8px;height:8px;border-radius:50%;background:var(--gold);}
+.compose-header span{font-size:12px;color:var(--gold);letter-spacing:1.5px;text-transform:uppercase;font-weight:600;}
+.compose-body{padding:16px 18px;}
+.compose-body input[type=text]{
+  width:100%;background:var(--navy3);border:1px solid var(--border);
+  border-radius:var(--radius-sm);color:var(--white);font-family:'DM Sans',sans-serif;
+  font-size:13px;padding:10px 14px;outline:none;transition:border-color .2s;margin-bottom:12px;display:block;
+}
+.compose-body input[type=text]:focus{border-color:var(--gold2);}
+.compose-body input[type=text]::placeholder{color:var(--muted2);}
+textarea.compose-ta{
+  width:100%;background:var(--navy3);border:1px solid var(--border);
+  border-radius:var(--radius-sm);color:var(--white);font-family:'DM Sans',sans-serif;
+  font-size:14px;line-height:1.6;padding:12px 14px;resize:none;outline:none;
+  transition:border-color .2s;min-height:90px;
+}
+textarea.compose-ta:focus{border-color:var(--gold2);}
+textarea.compose-ta::placeholder{color:var(--muted2);}
+.char-count{font-size:11px;color:var(--muted2);text-align:right;margin-top:4px;}
+.char-count.warn{color:#f87171;}
+.tags-row{display:flex;gap:6px;flex-wrap:wrap;margin:12px 0;}
+.tag-chip{
+  font-size:11px;padding:5px 12px;border-radius:20px;
+  border:1px solid var(--border);color:var(--muted);cursor:pointer;
+  background:transparent;font-family:'DM Sans',sans-serif;transition:all .15s;font-weight:500;
+}
+.tag-chip:hover{border-color:var(--gold);color:var(--gold);background:rgba(201,168,76,.08);}
+.tag-chip.active{border-color:var(--gold);color:var(--navy);background:var(--gold);}
+.compose-footer{display:flex;align-items:center;justify-content:space-between;margin-top:14px;flex-wrap:wrap;gap:10px;}
+.anon-label{display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:var(--muted);user-select:none;}
+.anon-label input{accent-color:var(--gold);width:14px;height:14px;cursor:pointer;}
+.submit-btn{
+  background:var(--gold);color:var(--navy);border:none;border-radius:var(--radius-sm);
+  font-family:'DM Sans',sans-serif;font-size:13px;font-weight:700;padding:10px 24px;
+  cursor:pointer;transition:all .2s;letter-spacing:.5px;
+}
+.submit-btn:hover{background:var(--gold2);transform:translateY(-1px);}
+.submit-btn:active{transform:scale(.97);}
+.submit-btn:disabled{opacity:.45;cursor:not-allowed;transform:none;}
+
+/* SEARCH BAR */
+.search-wrap{position:relative;margin-bottom:14px;}
+.search-wrap svg{position:absolute;left:12px;top:50%;transform:translateY(-50%);width:15px;height:15px;color:var(--muted2);pointer-events:none;}
+#search-input{
+  width:100%;background:var(--card);border:1px solid var(--border);
+  border-radius:var(--radius-sm);color:var(--white);font-family:'DM Sans',sans-serif;
+  font-size:13px;padding:9px 14px 9px 36px;outline:none;transition:border-color .2s;
+}
+#search-input:focus{border-color:var(--gold2);}
+#search-input::placeholder{color:var(--muted2);}
+
+/* FILTER / SORT */
+.filter-bar{display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap;}
+.filter-pill{
+  font-size:12px;padding:6px 16px;border-radius:20px;border:1px solid var(--border);
+  color:var(--muted);cursor:pointer;background:transparent;font-family:'DM Sans',sans-serif;
+  font-weight:500;transition:all .15s;
+}
+.filter-pill:hover{border-color:var(--muted);color:var(--white);}
+.filter-pill.active{background:var(--gold);color:var(--navy);border-color:var(--gold);font-weight:700;}
+.sort-bar{display:flex;align-items:center;gap:12px;margin-bottom:14px;font-size:12px;color:var(--muted);}
+.sort-btn{
+  background:none;border:none;font-family:'DM Sans',sans-serif;font-size:12px;
+  color:var(--muted);cursor:pointer;padding:4px 0;border-bottom:1px solid transparent;transition:all .15s;
+}
+.sort-btn.active{color:var(--gold);border-bottom-color:var(--gold);}
+.sort-btn:hover{color:var(--white);}
+
+/* FEED */
+.feed{display:flex;flex-direction:column;gap:10px;}
+.post-card{
+  background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+  overflow:hidden;transition:border-color .2s,transform .2s;animation:cardIn .35s ease both;
+}
+.post-card:hover{border-color:var(--border2);transform:translateY(-1px);}
+.post-card.pinned{border-color:rgba(201,168,76,.35);}
+@keyframes cardIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+.pin-ribbon{
+  background:rgba(201,168,76,.1);border-bottom:1px solid rgba(201,168,76,.2);
+  padding:7px 16px;display:flex;align-items:center;gap:7px;
+  font-size:11px;color:var(--gold);font-weight:600;letter-spacing:1px;text-transform:uppercase;
+}
+.post-body-wrap{display:flex;}
+.vote-col{
+  display:flex;flex-direction:column;align-items:center;
+  padding:16px 12px;gap:2px;min-width:54px;border-right:1px solid var(--border);
+}
+.vote-up-btn{
+  background:none;border:none;cursor:pointer;color:var(--muted);
+  padding:6px;border-radius:6px;transition:all .15s;
+  display:flex;align-items:center;justify-content:center;
+}
+.vote-up-btn:hover{background:rgba(201,168,76,.12);color:var(--gold);}
+.vote-up-btn.voted{color:var(--gold);}
+.vote-up-btn svg{width:18px;height:18px;}
+.vote-num{font-family:'Bebas Neue',sans-serif;font-size:18px;color:var(--white);line-height:1;}
+.vote-num.high{color:var(--gold);}
+.post-content{padding:14px 16px;flex:1;min-width:0;}
+.post-meta{display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;}
+.post-avatar{
+  width:26px;height:26px;border-radius:50%;background:var(--navy4);
+  border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;
+  font-size:10px;font-weight:700;color:var(--gold);flex-shrink:0;
+  font-family:'Bebas Neue',sans-serif;letter-spacing:.5px;
+}
+.post-author{font-size:13px;font-weight:600;color:var(--white);}
+.post-anon{font-size:13px;color:var(--muted);font-style:italic;}
+.post-tag-pill{font-size:10px;padding:2px 9px;border-radius:10px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;}
+.tag-General   {background:rgba(107,133,160,.15);color:#6b85a0;border:1px solid rgba(107,133,160,.3);}
+.tag-Facilities{background:rgba(201,168,76,.12);color:var(--gold);border:1px solid rgba(201,168,76,.3);}
+.tag-Rules     {background:rgba(248,113,113,.1);color:#f87171;border:1px solid rgba(248,113,113,.25);}
+.tag-Events    {background:rgba(129,196,139,.1);color:#81c48b;border:1px solid rgba(129,196,139,.25);}
+.tag-Wellbeing {background:rgba(147,197,253,.1);color:#93c5fd;border:1px solid rgba(147,197,253,.25);}
+.tag-Idea      {background:rgba(196,148,253,.1);color:#c494fd;border:1px solid rgba(196,148,253,.25);}
+.post-time{font-size:11px;color:var(--muted2);margin-left:auto;}
+.post-text{font-size:14px;line-height:1.65;color:var(--white);word-break:break-word;}
+.post-footer{display:flex;align-items:center;gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);flex-wrap:wrap;}
+.post-action-btn{
+  background:none;border:none;color:var(--muted2);font-family:'DM Sans',sans-serif;
+  font-size:12px;cursor:pointer;padding:4px 8px;border-radius:6px;
+  display:flex;align-items:center;gap:5px;transition:all .15s;
+}
+.post-action-btn:hover{background:var(--navy3);color:var(--white);}
+.post-action-btn.share-btn:hover{color:#93c5fd;}
+
+/* REPLY PANEL */
+.reply-panel{
+  border-top:1px solid var(--border);padding:12px 16px;
+  display:none;background:rgba(8,17,30,0.4);
+}
+.reply-panel.open{display:block;}
+.reply-input-row{display:flex;gap:8px;align-items:flex-end;}
+.reply-input{
+  flex:1;background:var(--navy3);border:1px solid var(--border);
+  border-radius:var(--radius-sm);color:var(--white);font-family:'DM Sans',sans-serif;
+  font-size:13px;padding:8px 12px;outline:none;transition:border-color .2s;resize:none;min-height:60px;
+}
+.reply-input:focus{border-color:var(--gold2);}
+.reply-input::placeholder{color:var(--muted2);}
+.reply-send-btn{
+  background:var(--gold);color:var(--navy);border:none;border-radius:var(--radius-sm);
+  font-family:'DM Sans',sans-serif;font-size:12px;font-weight:700;padding:8px 16px;
+  cursor:pointer;transition:all .2s;white-space:nowrap;align-self:flex-end;
+}
+.reply-send-btn:hover{background:var(--gold2);}
+.reply-send-btn:disabled{opacity:.45;cursor:not-allowed;}
+.replies-list{margin-top:10px;display:flex;flex-direction:column;gap:8px;}
+.reply-item{display:flex;gap:10px;align-items:flex-start;}
+.reply-avatar{
+  width:22px;height:22px;border-radius:50%;background:var(--navy4);
+  border:1px solid var(--border);display:flex;align-items:center;justify-content:center;
+  font-size:8px;font-weight:700;color:var(--gold);flex-shrink:0;
+  font-family:'Bebas Neue',sans-serif;
+}
+.reply-bubble{background:var(--navy3);border-radius:var(--radius-sm);padding:8px 12px;font-size:13px;color:var(--white);flex:1;}
+.reply-bubble-meta{font-size:11px;color:var(--muted2);margin-top:4px;}
+.reply-count-badge{
+  background:rgba(201,168,76,.15);border:1px solid var(--border2);
+  border-radius:10px;padding:2px 8px;font-size:10px;color:var(--gold);font-weight:600;
+}
+.replies-loading{font-size:12px;color:var(--muted2);padding:8px 0;font-style:italic;}
+
+/* MODAL — share */
+.modal-overlay{
+  display:none;position:fixed;inset:0;z-index:500;
+  background:rgba(8,17,30,0.85);backdrop-filter:blur(4px);
+  align-items:center;justify-content:center;
+}
+.modal-overlay.open{display:flex;}
+.modal-box{
+  background:var(--card);border:1px solid var(--border2);border-radius:var(--radius);
+  padding:24px;max-width:420px;width:90%;
+}
+.modal-title{font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:2px;color:var(--gold);margin-bottom:16px;}
+.modal-share-url{
+  background:var(--navy3);border:1px solid var(--border);border-radius:var(--radius-sm);
+  padding:10px 14px;font-size:12px;color:var(--muted);word-break:break-all;margin-bottom:14px;
+  font-family:monospace;
+}
+.modal-btns{display:flex;gap:10px;justify-content:flex-end;}
+.modal-btn{
+  background:none;border:1px solid var(--border2);color:var(--muted);
+  border-radius:var(--radius-sm);padding:8px 18px;font-family:'DM Sans',sans-serif;
+  font-size:13px;cursor:pointer;transition:all .15s;
+}
+.modal-btn:hover{border-color:var(--gold);color:var(--white);}
+.modal-btn.primary{background:var(--gold);color:var(--navy);border-color:var(--gold);font-weight:700;}
+.modal-btn.primary:hover{background:var(--gold2);}
+
+/* SIDEBAR */
+.sidebar{display:flex;flex-direction:column;gap:16px;}
+.sidebar-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:18px;animation:fadeUp .5s .5s ease both;}
+.sidebar-title{font-family:'Bebas Neue',sans-serif;font-size:14px;letter-spacing:2px;color:var(--gold);margin-bottom:14px;display:flex;align-items:center;gap:8px;}
+.sidebar-title::after{content:'';flex:1;height:1px;background:var(--border);}
+.cand-inner{display:flex;flex-direction:column;align-items:center;text-align:center;gap:12px;}
+.cand-photo{
+  width:80px;height:80px;border-radius:50%;background:var(--navy3);
+  border:2px solid var(--gold);display:flex;align-items:center;justify-content:center;
+  font-family:'Bebas Neue',sans-serif;font-size:28px;color:var(--gold);
+}
+.cand-name{font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:2px;color:var(--white);line-height:1;}
+.cand-role{font-size:11px;color:var(--gold);letter-spacing:2px;text-transform:uppercase;margin-top:2px;}
+.cand-quote{font-family:'Instrument Serif',serif;font-style:italic;font-size:14px;color:var(--muted);}
+.promise-list{display:flex;flex-direction:column;gap:8px;}
+.promise-item{display:flex;align-items:flex-start;gap:10px;font-size:13px;color:var(--muted);line-height:1.4;}
+.promise-dot{width:6px;height:6px;border-radius:50%;background:var(--gold);margin-top:5px;flex-shrink:0;}
+.stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.stat-mini{background:var(--navy3);border-radius:var(--radius-sm);padding:12px;text-align:center;}
+.stat-mini-num{font-family:'Bebas Neue',sans-serif;font-size:24px;color:var(--gold);line-height:1;display:block;}
+.stat-mini-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;}
+.top-tags-list{display:flex;flex-direction:column;gap:8px;}
+.top-tag-row{display:flex;align-items:center;gap:10px;font-size:12px;}
+.top-tag-name{color:var(--white);flex:1;}
+.top-tag-bar-wrap{flex:2;height:4px;background:var(--navy3);border-radius:2px;overflow:hidden;}
+.top-tag-bar{height:100%;background:var(--gold);border-radius:2px;transition:width .4s ease;}
+.top-tag-count{color:var(--muted);min-width:20px;text-align:right;}
+
+/* TRENDING */
+.trending-list{display:flex;flex-direction:column;gap:8px;}
+.trending-item{
+  display:flex;align-items:flex-start;gap:10px;padding:10px;
+  background:var(--navy3);border-radius:var(--radius-sm);
+  cursor:pointer;transition:background .15s;border:1px solid transparent;
+}
+.trending-item:hover{background:var(--navy4);border-color:var(--border);}
+.trending-rank{font-family:'Bebas Neue',sans-serif;font-size:20px;color:var(--muted2);line-height:1;min-width:20px;}
+.trending-text{font-size:12px;color:var(--muted);line-height:1.4;flex:1;}
+.trending-votes{font-size:11px;color:var(--gold);font-weight:600;white-space:nowrap;}
+
+/* EMPTY / LOADING */
+.empty-state{text-align:center;padding:56px 20px;color:var(--muted);}
+.empty-icon{font-size:48px;margin-bottom:16px;opacity:.35;}
+.empty-state p{font-size:14px;line-height:1.7;}
+.empty-state strong{color:var(--white);}
+.feed-loading{text-align:center;padding:40px;color:var(--muted);font-size:13px;}
+
+/* LOAD MORE */
+.load-more-btn{
+  width:100%;background:none;border:1px solid var(--border);border-radius:var(--radius-sm);
+  color:var(--muted);font-family:'DM Sans',sans-serif;font-size:13px;padding:12px;
+  cursor:pointer;transition:all .15s;margin-top:10px;
+}
+.load-more-btn:hover{border-color:var(--gold);color:var(--white);}
+
+/* TOAST */
+.toast{
+  position:fixed;bottom:28px;left:50%;
+  transform:translateX(-50%) translateY(20px);opacity:0;
+  background:var(--gold);color:var(--navy);font-weight:700;font-size:13px;
+  padding:11px 24px;border-radius:30px;z-index:9999;
+  transition:all .3s cubic-bezier(.34,1.56,.64,1);
+  pointer-events:none;white-space:nowrap;
+}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+/* SCROLL TO TOP */
+#scroll-top{
+  position:fixed;bottom:80px;right:24px;z-index:400;
+  width:40px;height:40px;border-radius:50%;
+  background:var(--card);border:1px solid var(--border2);
+  color:var(--gold);font-size:18px;cursor:pointer;
+  display:none;align-items:center;justify-content:center;
+  transition:all .2s;box-shadow:0 4px 12px rgba(0,0,0,0.3);
+}
+#scroll-top.visible{display:flex;}
+#scroll-top:hover{background:var(--gold);color:var(--navy);}
+
+.gold-divider{height:1px;background:linear-gradient(90deg,transparent,var(--gold),transparent);opacity:.3;}
+footer{border-top:1px solid var(--border);padding:24px;text-align:center;font-size:12px;color:var(--muted2);}
+footer strong{color:var(--gold);}
+@media(max-width:480px){
+  header{padding:0 14px}
+  #header-count{display:none}
+  #admin-indicator{padding:4px 8px;font-size:10px;}
+  .hero{padding:44px 16px 40px}
+  .layout{padding:0 12px 60px}
+  .hero-stats{gap:20px}
+  .compose-footer{flex-direction:column;align-items:flex-start}
+  .submit-btn{width:100%;text-align:center}
+}
+
+
+/* ADMIN LOGIN MODAL */
+#admin-modal {
+  display:none; position:fixed; inset:0; z-index:600;
+  background:rgba(8,17,30,0.88); backdrop-filter:blur(6px);
+  align-items:center; justify-content:center;
+}
+#admin-modal.open { display:flex; }
+#admin-modal-box {
+  background:var(--card); border:1px solid var(--border2);
+  border-radius:var(--radius); padding:28px 24px; width:300px; max-width:90vw;
+}
+#admin-modal-box h3 {
+  font-family:'Bebas Neue',sans-serif; font-size:18px; letter-spacing:2px;
+  color:var(--gold); margin-bottom:16px;
+}
+#admin-pw-input {
+  width:100%; background:var(--navy3); border:1px solid var(--border2);
+  border-radius:var(--radius-sm); color:var(--white);
+  font-family:'DM Sans',sans-serif; font-size:14px;
+  padding:10px 14px; outline:none; margin-bottom:14px; display:block;
+}
+#admin-pw-input:focus { border-color:var(--gold); }
+.admin-modal-btns { display:flex; gap:10px; justify-content:flex-end; }
+
+/* SEARCH HIGHLIGHT */
+mark{background:rgba(201,168,76,0.25);color:var(--gold);border-radius:2px;padding:0 2px;}
+
+/* ADMIN BADGE */
+.admin-badge {
+  display:inline-flex; align-items:center; gap:4px;
+  background:linear-gradient(135deg,#C9A84C,#e0bc68);
+  color:#08111e; font-size:9px; font-weight:800;
+  letter-spacing:1.2px; text-transform:uppercase;
+  padding:2px 7px; border-radius:10px;
+  box-shadow:0 0 8px rgba(201,168,76,0.45);
+  vertical-align:middle; margin-left:4px;
+  font-family:'DM Sans',sans-serif;
+  animation: adminGlow 2.5s ease-in-out infinite;
+}
+@keyframes adminGlow {
+  0%,100%{box-shadow:0 0 6px rgba(201,168,76,0.4);}
+  50%{box-shadow:0 0 14px rgba(201,168,76,0.75);}
+}
+.post-author.is-admin { color:var(--gold); }
+.post-avatar.is-admin {
+  background:linear-gradient(135deg,#C9A84C,#e0bc68);
+  color:var(--navy); border-color:var(--gold);
+}
+.reply-avatar.is-admin {
+  background:linear-gradient(135deg,#C9A84C,#e0bc68);
+  color:var(--navy); border-color:var(--gold);
+}
+/* Admin indicator in header when logged in */
+#admin-indicator {
+  display:flex; align-items:center; gap:6px;
+  background:rgba(201,168,76,0.06); border:1px solid rgba(201,168,76,0.12);
+  border-radius:20px; padding:4px 12px; font-size:11px; color:var(--muted2);
+  font-weight:600; letter-spacing:1px; cursor:pointer; transition:all .2s;
+}
+#admin-indicator.active {
+  background:rgba(201,168,76,0.12); border-color:var(--border2); color:var(--gold);
+}
+#admin-indicator:hover { background:rgba(201,168,76,0.2); color:var(--gold); }
+</style>
+</head>
+<body>
+
+<div id="connecting"><div class="spinner"></div><p>Connecting to database…</p></div>
+
+<div id="setup-banner">
+  ⚠️ <strong>Database not connected.</strong> Open this file, scroll to the top &lt;script&gt; block and paste your Firebase config values.
+  &nbsp;<a href="https://console.firebase.google.com" target="_blank">Get Firebase free →</a>
+  &nbsp;(Running in demo mode with sample data for now.)
+</div>
+
+<header>
+  <a class="logo" href="#">
+    <div class="logo-badge">AU</div>
+    <div>
+      <span class="logo-name">Afraz Umair</span>
+      <span class="logo-sub">Head Boy · Voice Board</span>
+    </div>
+  </a>
+  <div class="header-right">
+    <span id="header-count">— voices</span>
+    <div id="admin-indicator" title="Click to log in as owner">👑 OWNER</div>
+    <div class="live-pill"><div class="live-dot"></div><span>Live</span></div>
+  </div>
+</header>
+
+<div class="gold-divider"></div>
+
+<section class="hero">
+  <div class="hero-eyebrow"><span>★</span><span>Voicing the unheard · Building a more open school</span></div>
+  <h1>Your Voice,<br><span>Your School</span></h1>
+  <p class="hero-sub">Post your needs. Afraz reads every single one.</p>
+  <div class="hero-stats">
+    <div class="hero-stat"><span class="hero-stat-num" id="stat-posts">—</span><span class="hero-stat-label">Voices Posted</span></div>
+    <div class="hero-divider"></div>
+    <div class="hero-stat"><span class="hero-stat-num" id="stat-votes">—</span><span class="hero-stat-label">Total Supports</span></div>
+    <div class="hero-divider"></div>
+    <div class="hero-stat"><span class="hero-stat-num" id="stat-tags">—</span><span class="hero-stat-label">Topics Covered</span></div>
+  </div>
+</section>
+
+<div class="gold-divider"></div>
+
+<div class="layout">
+  <main>
+
+    <div class="compose-box">
+      <div class="compose-header">
+        <div class="compose-header-dot"></div>
+        <span>Post Your Voice</span>
+      </div>
+      <div class="compose-body">
+        <input type="text" id="name-input" placeholder="Your name (leave blank to stay anonymous)" maxlength="40">
+        <textarea class="compose-ta" id="post-input" rows="4" maxlength="300"
+          placeholder="What needs to change? What's missing? What would make school better? Afraz is listening…"></textarea>
+        <div class="char-count" id="char-count">0 / 300</div>
+        <div class="tags-row">
+          <button class="tag-chip active" data-tag="General">General</button>
+          <button class="tag-chip" data-tag="Facilities">Facilities</button>
+          <button class="tag-chip" data-tag="Rules">Rules</button>
+          <button class="tag-chip" data-tag="Events">Events</button>
+          <button class="tag-chip" data-tag="Wellbeing">Wellbeing</button>
+          <button class="tag-chip" data-tag="Idea">Idea</button>
+        </div>
+        <div class="compose-footer">
+          <label class="anon-label">
+            <input type="checkbox" id="anon-check"> Post anonymously
+          </label>
+          <button class="submit-btn" id="submit-btn" onclick="submitPost()">Post It →</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- SEARCH -->
+    <div class="search-wrap">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+      <input type="text" id="search-input" placeholder="Search voices…" oninput="onSearch(this.value)">
+    </div>
+
+    <div class="filter-bar">
+      <button class="filter-pill active" data-filter="all">All</button>
+      <button class="filter-pill" data-filter="General">General</button>
+      <button class="filter-pill" data-filter="Facilities">Facilities</button>
+      <button class="filter-pill" data-filter="Rules">Rules</button>
+      <button class="filter-pill" data-filter="Events">Events</button>
+      <button class="filter-pill" data-filter="Wellbeing">Wellbeing</button>
+      <button class="filter-pill" data-filter="Idea">Idea</button>
+    </div>
+
+    <div class="sort-bar">
+      <span>Sort by:</span>
+      <button class="sort-btn active" data-sort="votes" onclick="setSort('votes',this)">Top</button>
+      <button class="sort-btn" data-sort="new" onclick="setSort('new',this)">New</button>
+    </div>
+
+    <div class="feed" id="feed"><div class="feed-loading">Loading…</div></div>
+    <button class="load-more-btn" id="load-more-btn" onclick="loadMore()" style="display:none;">Load more voices ↓</button>
+
+  </main>
+
+  <aside class="sidebar">
+
+    <div class="sidebar-card">
+      <div class="sidebar-title">Candidate</div>
+      <div class="cand-inner">
+        <div class="cand-photo">AU</div>
+        <div>
+          <div class="cand-name">Afraz Umair</div>
+          <div class="cand-role">Head Boy Candidate</div>
+        </div>
+        <p class="cand-quote">"Because I listen before I lead."</p>
+      </div>
+    </div>
+
+    <div class="sidebar-card">
+      <div class="sidebar-title">Promises</div>
+      <div class="promise-list">
+        <div class="promise-item"><div class="promise-dot"></div><span>Voice every student's concern to leadership</span></div>
+        <div class="promise-item"><div class="promise-dot"></div><span>Build a more open, inclusive school culture</span></div>
+        <div class="promise-item"><div class="promise-dot"></div><span>Monthly student feedback sessions</span></div>
+        <div class="promise-item"><div class="promise-dot"></div><span>Transparent action on top-voted issues</span></div>
+      </div>
+    </div>
+
+    <div class="sidebar-card">
+      <div class="sidebar-title">Live Stats</div>
+      <div class="stats-grid">
+        <div class="stat-mini"><span class="stat-mini-num" id="sb-posts">—</span><span class="stat-mini-label">Posts</span></div>
+        <div class="stat-mini"><span class="stat-mini-num" id="sb-votes">—</span><span class="stat-mini-label">Supports</span></div>
+        <div class="stat-mini"><span class="stat-mini-num" id="sb-anon">—</span><span class="stat-mini-label">Anonymous</span></div>
+        <div class="stat-mini"><span class="stat-mini-num" id="sb-top">—</span><span class="stat-mini-label">Top Tag</span></div>
+      </div>
+    </div>
+
+    <div class="sidebar-card">
+      <div class="sidebar-title">Top Topics</div>
+      <div class="top-tags-list" id="top-tags-list">
+        <div style="font-size:12px;color:var(--muted)">Loading…</div>
+      </div>
+    </div>
+
+    <div class="sidebar-card">
+      <div class="sidebar-title">Trending Now</div>
+      <div class="trending-list" id="trending-list">
+        <div style="font-size:12px;color:var(--muted)">Loading…</div>
+      </div>
+    </div>
+
+  </aside>
+</div>
+
+<footer>
+  <strong>Afraz Umair</strong> · Head Boy Campaign · Voicing the Unheard<br>
+  <span style="margin-top:4px;display:block;">Every voice posted here is read. Every concern matters.</span>
+</footer>
+
+<div class="toast" id="toast"></div>
+
+
+<!-- Owner Login Modal -->
+<div id="admin-modal">
+  <div id="admin-modal-box">
+    <h3>👑 Owner Login</h3>
+    <input type="password" id="admin-pw-input" placeholder="Enter password…"
+      onkeydown="if(event.key==='Enter') submitAdminLogin()">
+    <div class="admin-modal-btns">
+      <button class="modal-btn" id="admin-cancel-btn">Cancel</button>
+      <button class="modal-btn primary" id="admin-submit-btn">Unlock</button>
+    </div>
+  </div>
+</div>
+
+<!-- Share Modal -->
+<div class="modal-overlay" id="share-modal" onclick="closeShareModal(event)">
+  <div class="modal-box">
+    <div class="modal-title">Share This Voice</div>
+    <div class="modal-share-url" id="share-url-text"></div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:14px;">Copy this link and share it with classmates to get more support!</div>
+    <div class="modal-btns">
+      <button class="modal-btn" onclick="closeShareModal()">Close</button>
+      <button class="modal-btn primary" onclick="copyShareUrl()">Copy Link</button>
+    </div>
+  </div>
+</div>
+
+<!-- Scroll to top -->
+<button id="scroll-top" onclick="window.scrollTo({top:0,behavior:'smooth'})" title="Back to top">↑</button>
+
+<!-- Firebase SDK -->
+<script type="module">
+import { initializeApp }
+  from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
+import {
+  getFirestore,
+  collection, addDoc, doc, updateDoc,
+  query, orderBy, onSnapshot,
+  serverTimestamp, increment
+} from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+
+// ─── DB INIT ──────────────────────────────────────────────────────────────────
+const KEYS_OK = FIREBASE_CONFIG.apiKey !== 'PASTE_apiKey_HERE';
+let db = null;
+if (KEYS_OK) {
+  const app = initializeApp(FIREBASE_CONFIG);
+  db = getFirestore(app);
+}
+
+// ─── ADMIN — password hashed in browser, stored in sessionStorage ─────────────
+// To change your password: update ADMIN_HASH below.
+// Generate a new hash by running this in browser console:
+//   crypto.subtle.digest('SHA-256', new TextEncoder().encode('yourpassword'))
+//     .then(b => console.log([...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')))
+// Current password is: afraz2024owner
+const ADMIN_HASH = '3e08b3da27ec0191a8bd1e8ea027f25ee7172c55633ba386e3496180ade40e37';
+const ADMIN_NAME = 'Afraz Umair'; // ← Must match the name you post with
+// ^^^ Replace this with YOUR actual hash after running the command above
+
+let _adminUnlocked = sessionStorage.getItem('vb_admin') === ADMIN_HASH;
+
+function isAdmin() { return _adminUnlocked; }
+
+async function tryUnlockAdmin(password) {
+  const buf  = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(password));
+  const hash = [...new Uint8Array(buf)].map(x => x.toString(16).padStart(2,'0')).join('');
+  if (hash === ADMIN_HASH) {
+    _adminUnlocked = true;
+    sessionStorage.setItem('vb_admin', hash);
+    syncAdminUI();
+    showToast('👑 Owner mode unlocked!');
+  } else {
+    showToast('Wrong password.');
+  }
+}
+
+// Admin modal wired via addEventListener in DOMContentLoaded below
+
+function syncAdminUI() {
+  const ind = document.getElementById('admin-indicator');
+  if (!ind) return;
+  ind.classList.toggle('active', isAdmin());
+}
+
+// Badge shown to EVERYONE — requires BOTH the isAdmin field in Firestore AND the correct name.
+// Without knowing the password, isAdmin is never written as true — so name alone is not enough.
+function postIsAdmin(postOrReply) {
+  return !!postOrReply.isAdmin &&
+         !!(postOrReply.name) &&
+         postOrReply.name.trim().toLowerCase() === ADMIN_NAME.toLowerCase();
+}
+
+// ─── STATE ────────────────────────────────────────────────────────────────────
+let allPosts     = [];
+let repliesStore = {};
+let replyUnsubs  = {};
+let activeFilter = 'all';
+let activeSort   = 'votes';
+let activeTag    = 'General';
+let searchQuery  = '';
+let visibleCount = 10;
+
+// ─── VOTE PERSISTENCE ─────────────────────────────────────────────────────────
+const VOTED_KEY = 'afraz_vb_voted_v1';
+const getVoted  = () => { try { return JSON.parse(localStorage.getItem(VOTED_KEY)||'[]'); } catch(e){ return []; } };
+const markVoted = id => { const v=getVoted(); if(!v.includes(id)){ v.push(id); localStorage.setItem(VOTED_KEY,JSON.stringify(v)); } };
+const hasVoted  = id => getVoted().includes(id);
+
+// ─── BOOT ─────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  setupTagChips();
+  setupFilterPills();
+  setupCharCount();
+  setupScrollTop();
+  setupAnonCheck();
+  syncAdminUI();
+
+  // ── Admin modal wiring ──────────────────────────────────────────────────────
+  const adminBtn   = document.getElementById('admin-indicator');
+  const adminModal = document.getElementById('admin-modal');
+  const adminInput = document.getElementById('admin-pw-input');
+  const adminSubmit= document.getElementById('admin-submit-btn');
+  const adminCancel= document.getElementById('admin-cancel-btn');
+
+  function openAdminModal() {
+    if (_adminUnlocked) { showToast('👑 Owner mode is active'); return; }
+    adminModal.classList.add('open');
+    setTimeout(() => adminInput.focus(), 50);
+  }
+  function closeAdminModal() {
+    adminModal.classList.remove('open');
+    adminInput.value = '';
+  }
+  function doAdminLogin() {
+    const pw = adminInput.value.trim();
+    closeAdminModal();
+    if (pw) tryUnlockAdmin(pw);
+  }
+
+  adminBtn.addEventListener('click', openAdminModal);
+  adminSubmit.addEventListener('click', doAdminLogin);
+  adminCancel.addEventListener('click', closeAdminModal);
+  adminModal.addEventListener('click', e => { if (e.target === adminModal) closeAdminModal(); });
+  adminInput.addEventListener('keydown', e => { if (e.key === 'Enter') doAdminLogin(); });
+  // ────────────────────────────────────────────────────────────────────────────
+
+  if (!KEYS_OK) {
+    document.getElementById('setup-banner').classList.add('show');
+    document.getElementById('connecting').classList.add('hidden');
+    allPosts = DEMO_POSTS;
+    repliesStore['d1'] = [
+      { name: 'Afraz Umair', isAdmin: true, text: 'Totally agree — I will bring this up at the next canteen review meeting.', ts: Date.now()-1800000 }
+    ];
+    renderAll();
+    return;
+  }
+
+  subscribePostsRealtime();
+});
+
+// ─── REAL-TIME POSTS ──────────────────────────────────────────────────────────
+function subscribePostsRealtime() {
+  const q = query(collection(db, 'posts'), orderBy('created_at', 'desc'));
+  onSnapshot(q, snapshot => {
+    const prevLen = allPosts.length;
+    allPosts = snapshot.docs.map(d => toPost(d.id, d.data()));
+    document.getElementById('connecting').classList.add('hidden');
+    renderAll();
+    if (prevLen > 0 && allPosts.length > prevLen) {
+      showToast('New voice just posted! 🔔');
+    }
+  }, err => {
+    console.error('Firebase posts error:', err);
+    document.getElementById('feed').innerHTML =
+      `<div class="empty-state"><div class="empty-icon">⚠️</div>
+       <p><strong>Could not load posts.</strong><br>Check your Firebase config and Firestore rules.<br>
+       <small style="color:var(--muted2)">${err.message}</small></p></div>`;
+    document.getElementById('connecting').classList.add('hidden');
+  });
+}
+
+// ─── REAL-TIME REPLIES for a specific post ────────────────────────────────────
+function subscribeReplies(postId) {
+  if (replyUnsubs[postId]) return; // already subscribed
+  const q = query(
+    collection(db, 'posts', postId, 'replies'),
+    orderBy('created_at', 'asc')
+  );
+  replyUnsubs[postId] = onSnapshot(q, snapshot => {
+    repliesStore[postId] = snapshot.docs.map(d => toReply(d.id, d.data()));
+    // Re-render just the reply section of this card (avoids full re-render flicker)
+    refreshReplyPanel(postId);
+  }, err => {
+    console.error(`Replies error (${postId}):`, err);
+  });
+}
+
+function unsubscribeReplies(postId) {
+  if (replyUnsubs[postId]) {
+    replyUnsubs[postId]();
+    delete replyUnsubs[postId];
+  }
+}
+
+// ─── DATA MAPPERS ─────────────────────────────────────────────────────────────
+function toPost(id, data) {
+  return {
+    id,
+    name:    data.name    || null,
+    anon:    !!data.anon,
+    isAdmin: !!data.isAdmin,
+    text:    data.text,
+    tag:     data.tag     || 'General',
+    votes:   data.votes   || 0,
+    ts:      data.created_at ? data.created_at.toMillis() : Date.now()
+  };
+}
+
+function toReply(id, data) {
+  return {
+    id,
+    name:    data.name    || null,
+    isAdmin: !!data.isAdmin,
+    text:    data.text,
+    ts:      data.created_at ? data.created_at.toMillis() : Date.now()
+  };
+}
+
+// ─── SUBMIT POST ──────────────────────────────────────────────────────────────
+window.submitPost = async function() {
+  const text = document.getElementById('post-input').value.trim();
+  if (!text)        { showToast('Write something first ✏️'); return; }
+  if (text.length < 5) { showToast('Please write a bit more!'); return; }
+
+  const btn = document.getElementById('submit-btn');
+  btn.disabled = true; btn.textContent = 'Posting…';
+
+  const nameRaw = document.getElementById('name-input').value.trim();
+  const anon    = document.getElementById('anon-check').checked;
+  const name    = (anon || !nameRaw) ? null : nameRaw;
+
+  if (!KEYS_OK) {
+    // demo mode
+    allPosts.unshift({
+      id: 'demo_' + Date.now(),
+      name, anon: anon || !nameRaw,
+      isAdmin: isAdmin() && !anon && !!name,
+      text, tag: activeTag, votes: 0, ts: Date.now()
+    });
+    clearCompose(); btn.disabled = false; btn.textContent = 'Post It →';
+    renderAll(); showToast('Posted! (demo mode)');
+    return;
+  }
+
+  try {
+    await addDoc(collection(db, 'posts'), {
+      name,
+      anon: anon || !nameRaw,
+      isAdmin: isAdmin() && !anon && !!name,
+      text,
+      tag: activeTag,
+      votes: 0,
+      created_at: serverTimestamp()
+    });
+    clearCompose();
+    showToast('Posted! Afraz will see this 👁');
+  } catch(e) {
+    console.error(e);
+    showToast('Could not post — check console.');
+  }
+  btn.disabled = false; btn.textContent = 'Post It →';
+};
+
+// ─── UPVOTE ───────────────────────────────────────────────────────────────────
+window.upvote = async function(id) {
+  if (hasVoted(id)) { showToast('You already supported this one!'); return; }
+  markVoted(id);
+  showToast('Support recorded! ▲');
+  // Re-render immediately so the button flips to "voted" state
+  renderAll();
+
+  if (!KEYS_OK) {
+    // Demo mode: mutate locally since there's no Firestore
+    const local = allPosts.find(p => p.id === id);
+    if (local) local.votes++;
+    renderAll();
+    return;
+  }
+  try {
+    // Atomic increment — Firestore SDK applies this to local cache instantly,
+    // triggering onSnapshot immediately with correct value. No manual +1 needed.
+    await updateDoc(doc(db, 'posts', id), { votes: increment(1) });
+  } catch(e) {
+    console.error('Upvote error:', e);
+    showToast('Could not record vote — try again.');
+  }
+};
+
+// ─── REPLY TOGGLE ─────────────────────────────────────────────────────────────
+window.toggleReply = function(id) {
+  const panel = document.getElementById('reply-panel-' + id);
+  if (!panel) return;
+  const isOpen = panel.classList.toggle('open');
+  if (isOpen) {
+    // Start listening to replies for this post
+    if (KEYS_OK) subscribeReplies(id);
+    const ta = panel.querySelector('textarea.reply-input');
+    if (ta) ta.focus();
+  } else {
+    // Stop listening when panel is closed (saves reads)
+    if (KEYS_OK) unsubscribeReplies(id);
+  }
+};
+
+// ─── SUBMIT REPLY ─────────────────────────────────────────────────────────────
+window.submitReply = async function(postId) {
+  const panel  = document.getElementById('reply-panel-' + postId);
+  const ta     = panel.querySelector('textarea.reply-input');
+  const nameIn = panel.querySelector('input.reply-name-input');
+  const btn    = panel.querySelector('.reply-send-btn');
+  const text   = ta.value.trim();
+  if (!text) { showToast('Write a reply first'); return; }
+
+  btn.disabled = true;
+
+  const name = nameIn ? nameIn.value.trim() || null : null;
+
+  if (!KEYS_OK) {
+    // demo mode — store locally
+    if (!repliesStore[postId]) repliesStore[postId] = [];
+    repliesStore[postId].push({ id: 'r_' + Date.now(), name, isAdmin: isAdmin() && !!name, text, ts: Date.now() });
+    ta.value = ''; if (nameIn) nameIn.value = '';
+    refreshReplyPanel(postId);
+    btn.disabled = false;
+    showToast('Reply added!');
+    return;
+  }
+
+  try {
+    await addDoc(collection(db, 'posts', postId, 'replies'), {
+      name,
+      isAdmin: isAdmin() && !!name,
+      text,
+      created_at: serverTimestamp()
+    });
+    ta.value = ''; if (nameIn) nameIn.value = '';
+    // onSnapshot will auto-update repliesStore and call refreshReplyPanel
+    showToast('Reply added!');
+  } catch(e) {
+    console.error('Reply error:', e);
+    showToast('Could not add reply — check console.');
+  }
+  btn.disabled = false;
+};
+
+// ─── REFRESH JUST THE REPLY LIST INSIDE A PANEL ───────────────────────────────
+function refreshReplyPanel(postId) {
+  const panel = document.getElementById('reply-panel-' + postId);
+  if (!panel || !panel.classList.contains('open')) return;
+
+  const replies = repliesStore[postId] || [];
+  const listEl  = panel.querySelector('.replies-list');
+
+  if (listEl) {
+    listEl.innerHTML = replies.map(r => replyHTML(r)).join('');
+  } else if (replies.length > 0) {
+    // Insert list before the input row
+    const inputRow = panel.querySelector('.reply-input-row');
+    const div = document.createElement('div');
+    div.className = 'replies-list';
+    div.innerHTML = replies.map(r => replyHTML(r)).join('');
+    panel.insertBefore(div, inputRow);
+  }
+
+  // Also update the reply count badge in the card footer
+  const badge = document.querySelector(`#post-${postId} .reply-count-badge`);
+  const replyBtn = document.querySelector(`#post-${postId} .reply-toggle-btn`);
+  if (replies.length > 0) {
+    if (badge) {
+      badge.textContent = replies.length;
+    } else if (replyBtn) {
+      const span = document.createElement('span');
+      span.className = 'reply-count-badge';
+      span.textContent = replies.length;
+      replyBtn.appendChild(span);
+    }
+  }
+}
+
+function replyHTML(r) {
+  const isAdminReply = postIsAdmin(r);
+  const avatarClass  = isAdminReply ? 'reply-avatar is-admin' : 'reply-avatar';
+  const badgeHTML    = isAdminReply ? `<span class="admin-badge">👑 Owner</span>` : '';
+  const nameDisplay  = r.name ? esc(r.name) : 'Anonymous';
+  return `<div class="reply-item">
+    <div class="${avatarClass}">${getInitials(r.name)}</div>
+    <div style="flex:1">
+      <div class="reply-bubble">${esc(r.text)}</div>
+      <div class="reply-bubble-meta">${nameDisplay}${badgeHTML} · ${timeAgo(r.ts)}</div>
+    </div>
+  </div>`;
+}
+
+// ─── SEARCH ───────────────────────────────────────────────────────────────────
+window.onSearch = function(val) {
+  searchQuery = val.trim().toLowerCase();
+  visibleCount = 10;
+  renderAll();
+};
+
+// ─── FILTER PILLS ─────────────────────────────────────────────────────────────
+function setupFilterPills() {
+  document.querySelectorAll('.filter-pill').forEach(pill => {
+    pill.addEventListener('click', () => {
+      document.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
+      pill.classList.add('active');
+      activeFilter = pill.dataset.filter;
+      visibleCount = 10;
+      renderAll();
+    });
+  });
+}
+
+window.setSort = function(s, btn) {
+  activeSort = s; visibleCount = 10;
+  document.querySelectorAll('.sort-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderAll();
+};
+
+window.loadMore = function() { visibleCount += 10; renderAll(); };
+
+// ─── MASTER RENDER ────────────────────────────────────────────────────────────
+function renderAll() {
+  let posts = [...allPosts];
+  if (activeFilter !== 'all') posts = posts.filter(p => p.tag === activeFilter);
+  if (searchQuery) {
+    posts = posts.filter(p =>
+      p.text.toLowerCase().includes(searchQuery) ||
+      (p.name && p.name.toLowerCase().includes(searchQuery)) ||
+      p.tag.toLowerCase().includes(searchQuery)
+    );
+  }
+  posts.sort(activeSort === 'votes'
+    ? (a, b) => b.votes - a.votes
+    : (a, b) => b.ts - a.ts
+  );
+
+  const total = posts.length;
+  renderFeed(posts.slice(0, visibleCount), searchQuery);
+  updateStats(allPosts);
+  updateTrending(allPosts);
+
+  const lmBtn = document.getElementById('load-more-btn');
+  lmBtn.style.display = total > visibleCount ? 'block' : 'none';
+  lmBtn.textContent   = `Load more voices ↓ (${total - visibleCount} remaining)`;
+}
+
+// ─── RENDER FEED ──────────────────────────────────────────────────────────────
+function renderFeed(posts, query) {
+  const feed = document.getElementById('feed');
+  if (!posts.length) {
+    feed.innerHTML = query
+      ? `<div class="empty-state"><div class="empty-icon">🔍</div>
+         <p><strong>No results for "${esc(query)}".</strong><br>Try a different word or clear the search.</p></div>`
+      : `<div class="empty-state"><div class="empty-icon">📭</div>
+         <p><strong>No voices yet.</strong><br>Be the first to speak up.<br>Afraz is listening.</p></div>`;
+    return;
+  }
+
+  const topVotes = posts[0].votes;
+
+  feed.innerHTML = posts.map((p, i) => {
+    const isTop     = i === 0 && topVotes > 0 && activeSort === 'votes';
+    const isVoted   = hasVoted(p.id);
+    const postReplies = repliesStore[p.id] || [];
+    const displayName = p.anon ? 'Anonymous' : (p.name || 'Anonymous');
+    const highlightText = query
+      ? esc(p.text).replace(new RegExp(`(${escRegex(query)})`, 'gi'), '<mark>$1</mark>')
+      : esc(p.text);
+
+    // Admin badge
+    const isAdminPost = !p.anon && postIsAdmin(p);
+    const adminBadgeHTML = isAdminPost
+      ? `<span class="admin-badge">👑 Owner</span>` : '';
+    const avatarClass = isAdminPost ? 'post-avatar is-admin' : 'post-avatar';
+    const authorClass = isAdminPost ? 'post-author is-admin' : 'post-author';
+
+    return `
+      <div class="post-card ${isTop ? 'pinned' : ''}" id="post-${p.id}">
+        ${isTop ? `<div class="pin-ribbon">⭐ Most Supported</div>` : ''}
+        <div class="post-body-wrap">
+          <div class="vote-col">
+            <button class="vote-up-btn ${isVoted ? 'voted' : ''}" onclick="upvote('${p.id}')"
+              title="${isVoted ? 'Already supported' : 'Support this voice'}">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="18 15 12 9 6 15"/>
+              </svg>
+            </button>
+            <span class="vote-num ${p.votes >= 5 ? 'high' : ''}">${p.votes}</span>
+          </div>
+          <div class="post-content">
+            <div class="post-meta">
+              <div class="${avatarClass}">${getInitials(p.name)}</div>
+              ${p.anon
+                ? `<span class="post-anon">Anonymous</span>`
+                : `<span class="${authorClass}">${esc(p.name || '')}${adminBadgeHTML}</span>`}
+              <span class="post-tag-pill tag-${p.tag}">${p.tag}</span>
+              <span class="post-time">${timeAgo(p.ts)}</span>
+            </div>
+            <p class="post-text">${highlightText}</p>
+            <div class="post-footer">
+              <button class="post-action-btn" onclick="upvote('${p.id}')">
+                ▲ ${isVoted ? 'Supported' : 'Support this'}
+              </button>
+              <span style="color:var(--muted2);font-size:12px">
+                ${p.votes} ${p.votes === 1 ? 'person' : 'people'} agree
+              </span>
+              <button class="post-action-btn reply-toggle-btn" onclick="toggleReply('${p.id}')">
+                💬 Reply
+                ${postReplies.length > 0
+                  ? `<span class="reply-count-badge">${postReplies.length}</span>`
+                  : ''}
+              </button>
+              <button class="post-action-btn share-btn" onclick="openShareModal('${p.id}')">
+                ↗ Share
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- REPLY PANEL -->
+        <div class="reply-panel" id="reply-panel-${p.id}">
+          ${postReplies.length > 0
+            ? `<div class="replies-list">${postReplies.map(r => replyHTML(r)).join('')}</div>`
+            : ''}
+          <div class="reply-input-row" style="margin-top:${postReplies.length > 0 ? '12px' : '0'}">
+            <div style="flex:1;display:flex;flex-direction:column;gap:6px">
+              <input type="text" class="reply-input reply-name-input"
+                style="min-height:auto;resize:none;padding:7px 12px;font-size:12px;"
+                placeholder="Your name (optional)" maxlength="40">
+              <textarea class="reply-input"
+                placeholder="Add a comment or show support…" maxlength="200"></textarea>
+            </div>
+            <button class="reply-send-btn" onclick="submitReply('${p.id}')">Send</button>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+// ─── SIDEBAR: STATS + TRENDING ────────────────────────────────────────────────
+function updateStats(all) {
+  const totalVotes = all.reduce((s, p) => s + p.votes, 0);
+  const anonCount  = all.filter(p => p.anon).length;
+  const tagMap     = {};
+  all.forEach(p => { tagMap[p.tag] = (tagMap[p.tag] || 0) + 1; });
+  const sorted = Object.entries(tagMap).sort((a, b) => b[1] - a[1]);
+  const topTag = sorted[0];
+
+  // Fix: update header-count immediately (no animation) so it's never stale
+  const hc = document.getElementById('header-count');
+  hc.textContent = `${all.length} ${all.length === 1 ? 'voice' : 'voices'}`;
+
+  animNum('stat-posts', all.length);
+  animNum('stat-votes', totalVotes);
+  animNum('stat-tags',  sorted.length);
+
+  document.getElementById('sb-posts').textContent = all.length;
+  document.getElementById('sb-votes').textContent = totalVotes;
+  document.getElementById('sb-anon').textContent  = anonCount;
+  document.getElementById('sb-top').textContent   = topTag ? topTag[0].slice(0, 5) : '—';
+
+  const max = topTag ? topTag[1] : 1;
+  document.getElementById('top-tags-list').innerHTML =
+    sorted.slice(0, 6).map(([tag, count]) => `
+      <div class="top-tag-row">
+        <span class="top-tag-name">${tag}</span>
+        <div class="top-tag-bar-wrap">
+          <div class="top-tag-bar" style="width:${Math.round(count / max * 100)}%"></div>
+        </div>
+        <span class="top-tag-count">${count}</span>
+      </div>`).join('') ||
+    `<div style="font-size:12px;color:var(--muted)">No posts yet.</div>`;
+}
+
+function updateTrending(all) {
+  const recent   = Date.now() - 86400000 * 3;
+  const trending = [...all]
+    .filter(p => p.ts > recent || p.votes > 0)
+    .sort((a, b) => b.votes - a.votes)
+    .slice(0, 5);
+
+  const list = document.getElementById('trending-list');
+  if (!trending.length) {
+    list.innerHTML = `<div style="font-size:12px;color:var(--muted)">No trending posts yet.</div>`;
+    return;
+  }
+  list.innerHTML = trending.map((p, i) => `
+    <div class="trending-item" onclick="scrollToPost('${p.id}')">
+      <span class="trending-rank">${i + 1}</span>
+      <span class="trending-text">${esc(p.text.slice(0, 70))}${p.text.length > 70 ? '…' : ''}</span>
+      <span class="trending-votes">▲ ${p.votes}</span>
+    </div>`).join('');
+}
+
+window.scrollToPost = function(id) {
+  const el = document.getElementById('post-' + id);
+  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+};
+
+// ─── SHARE MODAL ─────────────────────────────────────────────────────────────
+let currentShareUrl = '';
+window.openShareModal = function(id) {
+  currentShareUrl = `${window.location.href.split('#')[0]}#post-${id}`;
+  document.getElementById('share-url-text').textContent = currentShareUrl;
+  document.getElementById('share-modal').classList.add('open');
+};
+window.closeShareModal = function(e) {
+  if (!e || e.target === document.getElementById('share-modal'))
+    document.getElementById('share-modal').classList.remove('open');
+};
+window.copyShareUrl = function() {
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(currentShareUrl).then(() => {
+      showToast('Link copied! 🔗'); closeShareModal();
+    });
+  } else {
+    const el = document.createElement('textarea');
+    el.value = currentShareUrl; document.body.appendChild(el);
+    el.select(); document.execCommand('copy');
+    document.body.removeChild(el);
+    showToast('Link copied! 🔗'); closeShareModal();
+  }
+};
+
+// ─── SETUP HELPERS ────────────────────────────────────────────────────────────
+function setupCharCount() {
+  const ta = document.getElementById('post-input');
+  const cc = document.getElementById('char-count');
+  ta.addEventListener('input', () => {
+    const l = ta.value.length;
+    cc.textContent = `${l} / 300`;
+    cc.classList.toggle('warn', l > 270);
+  });
+}
+
+function setupTagChips() {
+  document.querySelectorAll('.tag-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      document.querySelectorAll('.tag-chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      activeTag = chip.dataset.tag;
+    });
+  });
+}
+
+function setupAnonCheck() {
+  const chk   = document.getElementById('anon-check');
+  const nameI = document.getElementById('name-input');
+  chk.addEventListener('change', () => {
+    nameI.style.opacity       = chk.checked ? '0.35' : '1';
+    nameI.style.pointerEvents = chk.checked ? 'none' : '';
+    if (chk.checked) nameI.value = '';
+  });
+}
+
+function setupScrollTop() {
+  const btn = document.getElementById('scroll-top');
+  window.addEventListener('scroll', () => btn.classList.toggle('visible', window.scrollY > 400));
+}
+
+function clearCompose() {
+  document.getElementById('post-input').value = '';
+  document.getElementById('char-count').textContent = '0 / 300';
+  document.getElementById('char-count').classList.remove('warn');
+}
+
+// ─── UTILITIES ────────────────────────────────────────────────────────────────
+function getInitials(name) {
+  if (!name || !name.trim()) return '?';
+  return name.trim().split(/\s+/).map(w => w[0]).join('').toUpperCase().slice(0, 2);
+}
+
+function timeAgo(ts) {
+  const d = Date.now() - ts;
+  if (d < 60000)     return 'just now';
+  if (d < 3600000)   return `${Math.floor(d / 60000)}m ago`;
+  if (d < 86400000)  return `${Math.floor(d / 3600000)}h ago`;
+  if (d < 604800000) return `${Math.floor(d / 86400000)}d ago`;
+  return new Date(ts).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+}
+
+function esc(s) {
+  if (!s) return '';
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function escRegex(s) { return s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'); }
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.classList.remove('show'), 2800);
+}
+
+const _timers = {};
+function animNum(id, target) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const raw = el.textContent.trim();
+  const cur = (raw === '—' || raw === '') ? 0 : (parseInt(raw) || 0);
+  if (cur === target) return;
+  clearInterval(_timers[id]);
+  let v = cur;
+  _timers[id] = setInterval(() => {
+    v += Math.ceil((target - v) / 6);
+    if (v >= target) { v = target; clearInterval(_timers[id]); }
+    el.textContent = v;
+  }, 40);
+}
+
+// ─── DEMO DATA ────────────────────────────────────────────────────────────────
+const DEMO_POSTS = [
+  { id:'d1', name:'Sarah K.',  anon:false, text:'The canteen needs more vegetarian options. Half the school is vegetarian and there are only 2 choices every day.', tag:'Facilities', votes:24, ts:Date.now()-3600000 },
+  { id:'d2', name:null,        anon:true,  text:'Can we have a quiet study room during lunch? Some of us need to revise and the library closes at lunch.', tag:'Wellbeing', votes:18, ts:Date.now()-7200000 },
+  { id:'d3', name:'James T.',  anon:false, text:'The uniform rules on shoes need updating — the current policy is unclear and teachers enforce it differently.', tag:'Rules', votes:11, ts:Date.now()-10800000 },
+  { id:'d4', name:null,        anon:true,  text:'An inter-house sports day would be amazing. Last one was years ago and students really want it back.', tag:'Events', votes:9, ts:Date.now()-14400000 },
+  { id:'d5', name:'Priya M.',  anon:false, text:'The toilets near block C are always out of soap and paper. A basic hygiene issue that needs fixing immediately.', tag:'Facilities', votes:7, ts:Date.now()-86400000 },
+  { id:'d6', name:'Omar B.',   anon:false, text:'A suggestion box app is a great idea. Also would love a mental health week with workshops.', tag:'Idea', votes:5, ts:Date.now()-172800000 },
+  { id:'d7', name:null,        anon:true,  text:'Can we get better Wi-Fi in the study halls? It drops constantly during peak hours and makes online research impossible.', tag:'Facilities', votes:14, ts:Date.now()-25200000 },
+  { id:'d8', name:'Aisha R.',  anon:false, text:'Would love a book swap corner in the common room — students could donate and take books freely.', tag:'Idea', votes:3, ts:Date.now()-50400000 },
+];
+</script>
+
+</body>
+</html>
